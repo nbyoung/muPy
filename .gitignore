@@ -1,0 +1,12 @@
+# Emacs
+*~
+\#*\#
+.\#*
+
+# C extensions
+*.so
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
