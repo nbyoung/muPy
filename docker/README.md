@@ -8,7 +8,7 @@
 uPy$ docker build --tag upy:cpy docker/CPython
 uPy$ docker run -it --network host --mount type=bind,src=`pwd`/app,dst=/flash --name cpy -d upy:cpy
 uPy$ docker exec -it cpy bash
-root@5184d7502e4e:/flash# python -c "import main; main.debug()"
+root@thermal:/flash# python -c "import main; main.debug()"
 DEBUG:main:forever tock
 DEBUG:main:network address=192.168.1.11 gateway=192.168.1.1
 DEBUG:main:forever tick
