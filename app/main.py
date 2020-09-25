@@ -13,7 +13,7 @@ else:
     handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
     logging.getLogger(LOGGER).addHandler(handler)
 
-async def forever(networkStore):
+async def forever(networkStatus):
     logger = logging.getLogger(LOGGER)
     flag = False
     i = 0
@@ -24,26 +24,26 @@ async def forever(networkStore):
         i += 1
         if i == 5:
             i = 0
-            dhcp_enable = await networkStore.get('dhcp_enable')
-            async with networkStore:
-               networkStore.set('dhcp_enable', not dhcp_enable)
+            dhcp_enable = await networkStatus.get('dhcp_enable')
+            async with networkStatus:
+               networkStatus.set('dhcp_enable', not dhcp_enable)
 
-async def _network(store):
+async def _network(status):
     logger = logging.getLogger(LOGGER)
     while True:
-        await store.event.wait()
-        store.event.clear()
+        await status.event.wait()
+        status.event.clear()
         lan = ipv4.LAN()
         try:
-            if await store.get('dhcp_enable'):
+            if await status.get('dhcp_enable'):
                 await lan.dhcp()
                 logger.debug('network DHCP')
             else:
-                address = await store.get('static.address')
-                gateway=await store.get('static.gateway')
+                address = await status.get('static.address')
+                gateway=await status.get('static.gateway')
                 await lan.static(
                     address, gateway,
-                    dns=(await store.get('static.dns'), 53)
+                    dns=(await status.get('static.dns'), 53)
                 )
                 logger.debug('network address=%s gateway=%s', address, gateway)
         except ipv4.LocalAreaNetworkError as exception:

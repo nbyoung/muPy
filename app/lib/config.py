@@ -1,4 +1,4 @@
-from store import FileStore
+from status import StatusFile
 import os
 import sys
 
@@ -9,7 +9,7 @@ class Config:
 
     def __init__(self, directory):
         self._directory = directory
-        self._network = FileStore()
+        self._network = StatusFile()
 
     async def load(self):
         if sys.implementation.name == 'micropython':

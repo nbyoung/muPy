@@ -1,0 +1,1 @@
+{"dhcp_enable": true, "static": {"dns": "8.8.8.8", "mask": "255.255.255.0", "gateway": "192.168.1.1", "address": "192.168.1.11"}}

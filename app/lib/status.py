@@ -9,13 +9,13 @@ else:
 
 _DOT = '.'
 
-class StoreNotLoaded(Exception):
+class StatusNotLoaded(Exception):
     pass
 
-class StoreNotLockedError(Exception):
+class StatusNotLockedError(Exception):
     pass
 
-class Store:
+class Status:
 
     @property
     def event(self): return self._event
@@ -30,7 +30,7 @@ class Store:
     async def get(self, path):
         try: self._data
         except AttributeError:
-            raise StoreNotLoadedError
+            raise StatusNotLoadedError
         def get(dictionary, path):
             if -1 < path.find(_DOT):
                 head, tail = path.split(_DOT)
@@ -54,7 +54,7 @@ class Store:
     def set(self, path, value):
         try: self._data
         except AttributeError:
-            raise StoreNotLoadedError
+            raise StatusNotLoadedError
         def set(dictionary, path, value):
             if -1 < path.find(_DOT):
                 head, tail = path.split(_DOT)
@@ -62,12 +62,12 @@ class Store:
             else:
                 dictionary[path] = value
         if self._event.is_set():
-            raise StoreNotLockedError
+            raise StatusNotLockedError
         else:
             set(self._data, path, value)
             pass
 
-class FileStore(Store):
+class StatusFile(Status):
 
     def load(self, filename):
         self._filename = filename
