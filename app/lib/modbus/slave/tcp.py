@@ -1,0 +1,132 @@
+from collections import namedtuple
+import socket
+import struct
+import sys
+
+_IS_MICROPYTHON = sys.implementation.name == 'micropython'
+_IS_MICROPYTHON_LINUX = _IS_MICROPYTHON and (sys.platform == 'linux')
+
+if _IS_MICROPYTHON:
+    import uasyncio as asyncio
+else:
+    import asyncio
+import select
+
+from .. import codes
+
+class ADU:
+
+    MAX = 260
+
+    @staticmethod
+    def fromBytes(bytes):
+        print(len(bytes), bytes)
+        format = '>HHHBB'
+        size = struct.calcsize(format)
+        transaction, protocol, length, slave, function = struct.unpack(
+            format, bytes[:size]
+        )
+        data = bytes[size:]
+        return ADU(transaction, protocol, length, slave, function, data)
+
+    def __init__(self, transaction, protocol, length, slave, function, data):
+        self._transaction = transaction
+        self._protocol = protocol
+        self._length = length
+        self._slave = slave
+        self._function = function
+        self._data = data
+
+    @property
+    def bytes(self):
+        return struct.pack(
+            '>HHHBBB',
+            self._transaction, self._protocol, self._length, self._slave, 
+            self._function | codes.Exception.Mask,
+            codes.Exception.IllegalFunction
+            )
+
+    @property
+    def pdu(self): return PDU(self._function, self._data)
+
+    def reply(self, pdu):
+        return self.__class__(
+            self._transaction, self._protocol, self._length, self._slave,
+            pdu.function, pdu.data
+            )
+
+
+class Handler:
+
+    size = ADU.MAX
+
+    def __init__(self):
+        pass
+
+    async def handle(self, bytes):
+        adu = ADU.fromBytes(bytes)
+        return adu.bytes
+    
+
+class SlaveHandler(Handler):
+
+    def __init__(self, pduHandler=None):
+        self._pduHandler = pduHandler
+
+    async def todo_handle(self, bytes): # TODO
+        replyPDU = await self._pduHandler.handle(adu.pdu)
+        return adu.reply(replyPDU).bytes
+    
+# class GatewayHandler # TODO
+        
+Client = namedtuple('Client', ('socket', 'address'))
+
+class ServerError(OSError): pass
+
+class Server:
+
+    def __init__(self, ip='0.0.0.0', port=502):
+        self._address = socket.getaddrinfo(ip, port)[0][-1]
+        # TODO Publish status interface:
+        # * Event notification
+        # * Client instance
+
+    # TODO Respond to changes in network status, e.g., pause, resume
+    
+    async def start(self, handler=Handler()):
+        serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        serverSocket.bind(self._address)
+        serverSocket.listen(0)
+        poll = select.poll()
+        poll.register(serverSocket, select.POLLIN)
+        client = None
+        while True:
+            ready = poll.poll(0)
+            if 0 < len(ready):
+                (_, mask) = ready[0]
+                if mask != select.POLLIN: raise ServerError('select.poll() 0x%x' % mask)
+                client = Client(*serverSocket.accept())
+                if _IS_MICROPYTHON_LINUX:   # TODO Resolve ports/unix dependency
+                    # b'\x02\x00\x89L\x7f\x00\x00\X01'
+                    client.address = (
+                        ".".join(
+                            [str(byte[0])
+                             for byte in struct.unpack('ssss', client.address[4:8])]
+                        ),
+                        struct.unpack('H', client.address[2:4])[0]
+                    )
+                print(client.address, client.socket)
+                while True:
+                    await asyncio.sleep(0)
+                    bytes = client.socket.recv(handler.size)
+                    if bytes:
+                        if not client.socket.send(await handler.handle(bytes)):
+                            break
+                    else:
+                        break
+                client.socket.close()
+            client = None
+            await asyncio.sleep(0)
+        poll.unregister(serverSocket)
+        serverSocket.close()

@@ -1,6 +1,7 @@
 from config import Config
 import ipv4
 import logging
+from modbus.slave.tcp import Server as ModbusTCPServer, SlaveHandler
 import sys
 
 LOGGER = "main"
@@ -13,20 +14,14 @@ else:
     handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
     logging.getLogger(LOGGER).addHandler(handler)
 
-async def forever(networkStatus):
+async def forever():
     logger = logging.getLogger(LOGGER)
     flag = False
     i = 0
     while True:
         logger.debug("forever %s" % ("tick" if flag else "tock"))
-        await asyncio.sleep(1)
         flag = not flag
-        i += 1
-        if i == 5:
-            i = 0
-            dhcp_enable = await networkStatus.get('dhcp_enable')
-            async with networkStatus:
-               networkStatus.set('dhcp_enable', not dhcp_enable)
+        await asyncio.sleep(1)
 
 async def _network(status):
     logger = logging.getLogger(LOGGER)
@@ -53,7 +48,9 @@ async def _main(configDir='/flash/configuration'):
     config = Config(configDir)
     asyncio.create_task(_network(config.network))
     await config.load()
-    await forever(config.network)
+    modbusTCPServer = ModbusTCPServer()
+    asyncio.create_task(modbusTCPServer.start(SlaveHandler()))
+    await forever()
 
 def main():
     asyncio.run(_main())
