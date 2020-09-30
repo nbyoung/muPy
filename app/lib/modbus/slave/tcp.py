@@ -1,4 +1,5 @@
 from collections import namedtuple
+import logging
 import socket
 import struct
 import sys
@@ -12,70 +13,61 @@ else:
     import asyncio
 import select
 
-from .. import codes
+from ..pdu import PDU
 
 class ADU:
 
-    MAX = 260
+    _format     = '>HHHBB'
+    MAX         = 260
 
     @staticmethod
     def fromBytes(bytes):
-        print(len(bytes), bytes)
-        format = '>HHHBB'
-        size = struct.calcsize(format)
+        size = struct.calcsize(ADU._format)
         transaction, protocol, length, slave, function = struct.unpack(
-            format, bytes[:size]
+            ADU._format, bytes[:size]
         )
         data = bytes[size:]
-        return ADU(transaction, protocol, length, slave, function, data)
+        return ADU(transaction, protocol, slave, function, data)
 
-    def __init__(self, transaction, protocol, length, slave, function, data):
+    def __init__(self, transaction, protocol, slave, function, data):
         self._transaction = transaction
         self._protocol = protocol
-        self._length = length
         self._slave = slave
         self._function = function
         self._data = data
 
     @property
     def bytes(self):
+        length = len(self._data) + struct.calcsize('BB')
         return struct.pack(
-            '>HHHBBB',
-            self._transaction, self._protocol, self._length, self._slave, 
-            self._function | codes.Exception.Mask,
-            codes.Exception.IllegalFunction
-            )
+            ADU._format,
+            self._transaction, self._protocol, length, self._slave, 
+            self._function
+            ) + self._data
 
     @property
     def pdu(self): return PDU(self._function, self._data)
 
     def reply(self, pdu):
         return self.__class__(
-            self._transaction, self._protocol, self._length, self._slave,
+            self._transaction, self._protocol, self._slave,
             pdu.function, pdu.data
             )
 
 
-class Handler:
+class _Handler:
 
     size = ADU.MAX
+    
 
-    def __init__(self):
-        pass
+class SlaveHandler(_Handler):
+
+    def __init__(self, pduHandler):
+        self._pduHandler = pduHandler
 
     async def handle(self, bytes):
         adu = ADU.fromBytes(bytes)
-        return adu.bytes
-    
-
-class SlaveHandler(Handler):
-
-    def __init__(self, pduHandler=None):
-        self._pduHandler = pduHandler
-
-    async def todo_handle(self, bytes): # TODO
-        replyPDU = await self._pduHandler.handle(adu.pdu)
-        return adu.reply(replyPDU).bytes
+        return adu.reply(await self._pduHandler.handle(adu.pdu)).bytes
     
 # class GatewayHandler # TODO
         
@@ -85,6 +77,8 @@ class ServerError(OSError): pass
 
 class Server:
 
+    _logger = logging.getLogger("main") # TODO Move to uPy context
+
     def __init__(self, ip='0.0.0.0', port=502):
         self._address = socket.getaddrinfo(ip, port)[0][-1]
         # TODO Publish status interface:
@@ -93,7 +87,7 @@ class Server:
 
     # TODO Respond to changes in network status, e.g., pause, resume
     
-    async def start(self, handler=Handler()):
+    async def start(self, handler):
         serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         serverSocket.bind(self._address)
@@ -109,14 +103,20 @@ class Server:
                 client = Client(*serverSocket.accept())
                 if _IS_MICROPYTHON_LINUX:   # TODO Resolve ports/unix dependency
                     # b'\x02\x00\x89L\x7f\x00\x00\X01'
-                    client.address = (
+                    address = (
                         ".".join(
                             [str(byte[0])
                              for byte in struct.unpack('ssss', client.address[4:8])]
                         ),
                         struct.unpack('H', client.address[2:4])[0]
                     )
-                print(client.address, client.socket)
+                else:
+                    address = client.address
+                Server._logger.debug(
+                    '%s.%s connection from %s via %s' % (
+                        __name__, self.__class__.__name__, address, client.socket
+                    )
+                )
                 while True:
                     await asyncio.sleep(0)
                     bytes = client.socket.recv(handler.size)
