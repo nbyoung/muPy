@@ -5,6 +5,11 @@ from . import codes
 class Handler:
 
     async def handle(self, pdu):
+        raise NotImplemented()
+
+class DoNothingHandler(Handler):
+
+    async def handle(self, pdu):
         return pdu.exception(codes.Exception.IllegalFunction)
 
 class PDU:
@@ -15,7 +20,7 @@ class PDU:
     @property
     def data(self): return self._data
     
-    def __init__(self, function, data):
+    def __init__(self, function, data=b''):
         self._function = function
         self._data = data
 

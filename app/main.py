@@ -2,7 +2,9 @@ from config import Config
 import ipv4
 import logging
 from modbus import pdu
-from modbus.slave.tcp import Server as ModbusTCPServer, SlaveHandler
+from modbus.slave.tcp import Server as ModbusTCPServer
+from modbus.slave.tcp import Slave as ModbusTCPSlave
+from modbus.slave.tcp import Handler as ModbusTCPHandler
 import sys
 
 LOGGER = "main"
@@ -50,7 +52,9 @@ async def _main(configDir='/flash/configuration'):
     asyncio.create_task(_network(config.network))
     await config.load()
     modbusTCPServer = ModbusTCPServer()
-    asyncio.create_task(modbusTCPServer.start(SlaveHandler(pdu.Handler())))
+    modbusTCPSlave = ModbusTCPSlave(pdu.DoNothingHandler())
+    modbusTCPHandler = ModbusTCPHandler(modbusTCPSlave)
+    asyncio.create_task(modbusTCPServer.start(modbusTCPHandler))
     await forever()
 
 def main():

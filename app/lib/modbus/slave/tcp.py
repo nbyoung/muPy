@@ -13,6 +13,7 @@ else:
     import asyncio
 import select
 
+from .. import codes
 from ..pdu import PDU
 
 class ADU:
@@ -46,6 +47,9 @@ class ADU:
             ) + self._data
 
     @property
+    def slave(self): return self._slave
+
+    @property
     def pdu(self): return PDU(self._function, self._data)
 
     def reply(self, pdu):
@@ -55,21 +59,38 @@ class ADU:
             )
 
 
-class _Handler:
+class Slave:
+
+    def __init__(self, pduHandler, addresses=((0x00, 0xFF))):
+        self._pduHandler = pduHandler
+        self._addresses = addresses # TODO From configuration
+                 
+    @property
+    def pduHandler(self): return self._pduHandler
+                 
+    @property
+    def addresses(self): return self._addresses
+
+class Handler:
 
     size = ADU.MAX
-    
 
-class SlaveHandler(_Handler):
-
-    def __init__(self, pduHandler):
-        self._pduHandler = pduHandler
+    def __init__(self, localSlave=None):
+        # TODO Accept remote device addresses
+        self._localSlave = localSlave
 
     async def handle(self, bytes):
         adu = ADU.fromBytes(bytes)
-        return adu.reply(await self._pduHandler.handle(adu.pdu)).bytes
-    
-# class GatewayHandler # TODO
+        return adu.reply(
+            (
+                await self._localSlave.pduHandler.handle(adu.pdu)
+                if adu.slave in self._localSlave.addresses
+                # TODO Enable remote target access through configuration
+                else adu.pdu.exception(
+                        codes.Exception.GatewayTargetFailedToRespond
+                )
+            )
+        ).bytes
         
 Client = namedtuple('Client', ('socket', 'address'))
 

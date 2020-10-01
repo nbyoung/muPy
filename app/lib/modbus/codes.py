@@ -61,4 +61,4 @@ class Exception:
     NegativeAcknowledge                 = 0x07  #  7
     MemoryParityError                   = 0x08  #  8
     GatewayPathUnavailable              = 0x0A  # 10
-    GatewayTargetDeviceFailedToRespond  = 0x0B  # 11
+    GatewayTargetFailedToRespond        = 0x0B  # 11
