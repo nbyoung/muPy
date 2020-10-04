@@ -52,8 +52,8 @@ class Exception:
     Mask                                = 0x80
                                                 # EXCEPTION
                                                 # ---------
-    #IllegalFunction                     = 0x01  #  1
-    #IllegalDataAddress                  = 0x02  #  2
+    IllegalFunction                     = 0x01  #  1
+    IllegalDataAddress                  = 0x02  #  2
     IllegalDataValue                    = 0x03  #  3
     SlaveDeviceFailure                  = 0x04  #  4
     Acknowledge                         = 0x05  #  5

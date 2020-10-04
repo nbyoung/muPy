@@ -3,18 +3,26 @@ import struct
 
 from . import codes
 
-class _IllegalDataAddress(Exception): code = 0x02
+class _IllegalDataAddress(Exception): code = codes.Exception.IllegalDataAddress
 
 class Region:
 
-    def __init__(self, address=0, count=0):
-        if 0 <= address and 0 <= count and address + count <= Block.MAX:
-            self._address = address
-            self._count = count
-        else:
-            'Illegal region address (%d+%d=%d)' % (
-                region.address, region.count, region.last,
+    def __init__(self, address=0, count=0, max=0):
+        last = address + count
+        if address < 0 or count < 0 or Block.MAX < last:
+            raise _IllegalDataAddress(
+                'Illegal region address %d+%d=%d' % (
+                    address, count, last
+                )
             )
+        if max < count:
+            raise _IllegalDataAddress(
+                'Illegal region address %d count exceeds %d max' % (
+                    count, max
+                )
+            )
+        self._address = address
+        self._count = count
 
     def __str__(self): return '%s(%d, %d)' % (
             self.__class__.__name__, self._address, self._count
@@ -34,9 +42,9 @@ class Block(Region):
     MAX = 0xFFFF
 
     def __init__(self, count=0):
-        super().__init__(0, count)
+        super().__init__(0, count, count)
     
-    def validate(self, region):
+    def valid(self, region):
         if self.last < region.last:
             raise _IllegalDataAddress(
                 'Region address (%d+%d=%d) exceeds data block (%d+%d=%d)' % (
@@ -59,17 +67,17 @@ class DataModel:
         self._inputBlock = Block(count=inputCount)
         self._holdingBlock = Block(count=holdingCount)
 
-    def _validate(
+    def _valid(
             self,
             coilRegion=Region(),
             discreteRegion=Region(),
             inputRegion=Region(),
             holdingRegion=Region(),
     ):
-        self._coilBlock.validate(coilRegion)
-        self._discreteBlock.validate(discreteRegion)
-        self._inputBlock.validate(inputRegion)
-        self._holdingBlock.validate(holdingRegion)
+        self._coilBlock.valid(coilRegion)
+        self._discreteBlock.valid(discreteRegion)
+        self._inputBlock.valid(inputRegion)
+        self._holdingBlock.valid(holdingRegion)
 
     @property
     def coilBlock(self): return self._coilBlock
@@ -101,7 +109,7 @@ class PDU:
     def exception(self, code): # Move to Transcoder
         return 
 
-class _IllegalFunction(Exception): code = 0x01
+class _IllegalFunction(Exception): code = codes.Exception.IllegalFunction
 
 class Handler:
 
@@ -119,9 +127,15 @@ class Handler:
 
     async def handle(self, pdu):
         try:
-            if pdu.functionCode == 0x03:
-                fromRegion = Region(*struct.unpack('>HH', pdu.bytes))
-                #self._dataModel.holdingBlock.validate(fromRegion)
+            if pdu.functionCode == codes.Function.ReadCoils:
+                max = 2000
+                max = 0
+                fromRegion = Region(*struct.unpack('>HH', pdu.bytes), max=max)
+                self._dataModel.holdingBlock.valid(fromRegion)
+                data = await self.ReadCoils(self._dataModel, fromRegion)
+            elif pdu.functionCode == codes.Function.ReadMultipleHoldingRegisters:
+                fromRegion = Region(*struct.unpack('>HH', pdu.bytes), max=125)
+                self._dataModel.holdingBlock.valid(fromRegion)
                 data = await self.ReadMultipleHoldingRegisters(
                     self._dataModel, fromRegion
                 )
@@ -130,15 +144,20 @@ class Handler:
             return PDU(pdu.functionCode, data)
         except _IllegalFunction as exception:
             Handler._logger.info(
-                'Function code %d %s not implemented',
+                'Function code=%d %s not implemented',
                 pdu.functionCode, str(exception)
             )
             return Handler._exceptionPDU(pdu.functionCode, exception.code)
         except _IllegalDataAddress as exception:
             Handler._logger.info(
-                'Function code %d: %s', pdu.functionCode, str(exception)
+                'Function code=%d %s', pdu.functionCode, str(exception)
             )
             return Handler._exceptionPDU(pdu.functionCode, exception.code)
+
+    async def ReadCoils(
+            self, dataModel, fromRegion
+    ):
+        raise _IllegalFunction("ReadCoils")
 
     async def ReadMultipleHoldingRegisters(
             self, dataModel, fromRegion
