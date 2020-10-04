@@ -52,7 +52,7 @@ async def _main(configDir='/flash/configuration'):
     asyncio.create_task(_network(config.network))
     await config.load()
     modbusTCPServer = ModbusTCPServer()
-    modbusTCPSlave = ModbusTCPSlave(pdu.DoNothingHandler())
+    modbusTCPSlave = ModbusTCPSlave(pdu.Handler())
     modbusTCPHandler = ModbusTCPHandler(modbusTCPSlave)
     asyncio.create_task(modbusTCPServer.start(modbusTCPHandler))
     await forever()
