@@ -7,6 +7,8 @@ from modbus.slave.tcp import Slave as ModbusTCPSlave
 from modbus.slave.tcp import Handler as ModbusTCPHandler
 import sys
 
+from demo.modbus.slave import pdu, data
+
 LOGGER = "main"
 
 if sys.implementation.name == 'micropython':
@@ -52,7 +54,7 @@ async def _main(configDir='/flash/configuration'):
     asyncio.create_task(_network(config.network))
     await config.load()
     modbusTCPServer = ModbusTCPServer()
-    modbusTCPSlave = ModbusTCPSlave(pdu.Handler())
+    modbusTCPSlave = ModbusTCPSlave(pdu.Handler(data.Model()))
     modbusTCPHandler = ModbusTCPHandler(modbusTCPSlave)
     asyncio.create_task(modbusTCPServer.start(modbusTCPHandler))
     await forever()

@@ -1,98 +1,9 @@
+from array import array
 import logging
 import struct
 
 from . import codes
-
-class _IllegalDataAddress(Exception): code = codes.Exception.IllegalDataAddress
-
-class Region:
-
-    def __init__(self, address=0, count=0, max=0):
-        last = address + count
-        if address < 0 or count < 0 or Block.MAX < last:
-            raise _IllegalDataAddress(
-                'Illegal region address %d+%d=%d' % (
-                    address, count, last
-                )
-            )
-        if max < count:
-            raise _IllegalDataAddress(
-                'Illegal region address %d count exceeds %d max' % (
-                    count, max
-                )
-            )
-        self._address = address
-        self._count = count
-
-    def __str__(self): return '%s(%d, %d)' % (
-            self.__class__.__name__, self._address, self._count
-    )
-
-    @property
-    def address(self): return self._address
-
-    @property
-    def count(self): return self._count
-
-    @property
-    def last(self): return self._address + self._count
-
-class Block(Region):
-
-    MAX = 0xFFFF
-
-    def __init__(self, count=0):
-        super().__init__(0, count, count)
-    
-    def valid(self, region):
-        if self.last < region.last:
-            raise _IllegalDataAddress(
-                'Region address (%d+%d=%d) exceeds data block (%d+%d=%d)' % (
-                    region.address, region.count, region.last,
-                    self.address, self.count, self.last,
-                )
-            )
-
-class DataModel:
-
-    def __init__(
-            self,
-            coilCount=0,
-            discreteCount=0,
-            inputCount=0,
-            holdingCount=0,
-    ):
-        self._coilBlock = Block(count=coilCount)
-        self._discreteBlock = Block(count=discreteCount)
-        self._inputBlock = Block(count=inputCount)
-        self._holdingBlock = Block(count=holdingCount)
-
-    def _valid(
-            self,
-            coilRegion=Region(),
-            discreteRegion=Region(),
-            inputRegion=Region(),
-            holdingRegion=Region(),
-    ):
-        self._coilBlock.valid(coilRegion)
-        self._discreteBlock.valid(discreteRegion)
-        self._inputBlock.valid(inputRegion)
-        self._holdingBlock.valid(holdingRegion)
-
-    @property
-    def coilBlock(self): return self._coilBlock
-    
-    @property
-    def discreteBlock(self): return self._discreteBlock
-
-    @property
-    def inputBlock(self): return self._inputBlock
-
-    @property
-    def holdingBlock(self): return self._holdingBlock
-
-    def getBlah(self):
-        pass # return blah
+from . import data
 
 class PDU:
 
@@ -109,7 +20,7 @@ class PDU:
     def exception(self, code): # Move to Transcoder
         return 
 
-class _IllegalFunction(Exception): code = codes.Exception.IllegalFunction
+class IllegalFunction(Exception): code = codes.Exception.IllegalFunction
 
 class Handler:
 
@@ -122,44 +33,51 @@ class Handler:
             struct.pack('>B', exceptionCode)
         )
 
-    def __init__(self, dataModel=DataModel()):
+    def __init__(self, dataModel=data.Model()):
         self._dataModel = dataModel
 
     async def handle(self, pdu):
         try:
-            if pdu.functionCode == codes.Function.ReadCoils:
-                max = 2000
-                max = 0
-                fromRegion = Region(*struct.unpack('>HH', pdu.bytes), max=max)
+            code = pdu.functionCode
+            if code == codes.Function.ReadMultipleHoldingRegisters:
+                fromRegion = data.Region(
+                    *struct.unpack('>HH', pdu.bytes), max=125
+                )
                 self._dataModel.holdingBlock.valid(fromRegion)
-                data = await self.ReadCoils(self._dataModel, fromRegion)
-            elif pdu.functionCode == codes.Function.ReadMultipleHoldingRegisters:
-                fromRegion = Region(*struct.unpack('>HH', pdu.bytes), max=125)
-                self._dataModel.holdingBlock.valid(fromRegion)
-                data = await self.ReadMultipleHoldingRegisters(
+                bytes = await self.ReadMultipleHoldingRegisters(
                     self._dataModel, fromRegion
                 )
+            elif code == codes.Function.WriteMultipleHoldingRegisters:
+                format = '>HHB'
+                toAddress, toCount, byteCount = struct.unpack(
+                    format, pdu.bytes[:struct.calcsize(format)]
+                )
+                max = 0x7B
+                toRegion = data.Region(toAddress, toCount, max)
+                self._dataModel.holdingBlock.valid(toRegion)
+                values = tuple(struct.unpack(
+                    '>%dH' % toCount, pdu.bytes[struct.calcsize(format):]
+                ))
+                bytes = await self.WriteMultipleHoldingRegisters(
+                    self._dataModel, toRegion, values
+                )
             else:
-                raise _IllegalFunction()
-            return PDU(pdu.functionCode, data)
-        except _IllegalFunction as exception:
+                raise IllegalFunction()
+            return PDU(code, bytes)
+        except IllegalFunction as exception:
             Handler._logger.info(
                 'Function code=%d %s not implemented',
                 pdu.functionCode, str(exception)
             )
             return Handler._exceptionPDU(pdu.functionCode, exception.code)
-        except _IllegalDataAddress as exception:
+        except data.IllegalDataAddress as exception:
             Handler._logger.info(
                 'Function code=%d %s', pdu.functionCode, str(exception)
             )
             return Handler._exceptionPDU(pdu.functionCode, exception.code)
 
-    async def ReadCoils(
-            self, dataModel, fromRegion
-    ):
-        raise _IllegalFunction("ReadCoils")
+    async def ReadMultipleHoldingRegisters(self, dataModel, fromRegion):
+        raise IllegalFunction("ReadMultipleHoldingRegisters")
 
-    async def ReadMultipleHoldingRegisters(
-            self, dataModel, fromRegion
-    ):
-        raise _IllegalFunction("ReadMultipleHoldingRegisters")
+    async def WriteMultipleHoldingRegisters(self, dataModel, fromRegion):
+        raise IllegalFunction("WriteMultipleHoldingRegisters")
