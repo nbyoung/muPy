@@ -43,23 +43,48 @@ class Handler:
                 fromRegion = data.Region(
                     *struct.unpack('>HH', pdu.bytes), max=125
                 )
-                self._dataModel.holdingBlock.valid(fromRegion)
+                self._dataModel.holdingBlock.validRegion(fromRegion)
                 bytes = await self.ReadMultipleHoldingRegisters(
                     self._dataModel, fromRegion
+                )
+            elif code == codes.Function.WriteSingleHoldingRegister:
+                format = '>HH'
+                toAddress, value = struct.unpack(
+                    format, pdu.bytes[:struct.calcsize(format)]
+                )
+                self._dataModel.holdingBlock.validRegion(
+                    data.Region(toAddress, 1, 1)
+                )
+                bytes = await self.WriteSingleHoldingRegister(
+                    self._dataModel, toAddress, value
                 )
             elif code == codes.Function.WriteMultipleHoldingRegisters:
                 format = '>HHB'
                 toAddress, toCount, byteCount = struct.unpack(
                     format, pdu.bytes[:struct.calcsize(format)]
                 )
-                max = 0x7B
-                toRegion = data.Region(toAddress, toCount, max)
-                self._dataModel.holdingBlock.valid(toRegion)
+                toRegion = data.Region(toAddress, toCount, max=0x7B)
+                self._dataModel.holdingBlock.validRegion(toRegion)
                 values = tuple(struct.unpack(
                     '>%dH' % toCount, pdu.bytes[struct.calcsize(format):]
                 ))
                 bytes = await self.WriteMultipleHoldingRegisters(
                     self._dataModel, toRegion, values
+                )
+            elif code == codes.Function.ReadWriteMultipleRegisters:
+                format = '>HHHHB'
+                (
+                    fromAddress, fromCount, toAddress, toCount, byteCount
+                ) = struct.unpack(format, pdu.bytes[:struct.calcsize(format)])
+                fromRegion = Region(fromAddress, fromCount, max=0x7D)
+                self._dataModel.holdingBlock.validRegion(fromRegion)
+                toRegion = data.Region(toAddress, toCount, max=0x79)
+                self._dataModel.holdingBlock.validRegion(toRegion)
+                values = tuple(struct.unpack(
+                    '>%dH' % toCount, pdu.bytes[struct.calcsize(format):]
+                ))
+                bytes = await self.ReadWriteMultipleRegisters(
+                    self._dataModel, fromRegion, toRegion, values
                 )
             else:
                 raise IllegalFunction()
@@ -79,5 +104,8 @@ class Handler:
     async def ReadMultipleHoldingRegisters(self, dataModel, fromRegion):
         raise IllegalFunction("ReadMultipleHoldingRegisters")
 
-    async def WriteMultipleHoldingRegisters(self, dataModel, fromRegion):
+    async def WriteSingleHoldingRegister(self, dataModel, toAddress, value):
+        raise IllegalFunction("WriteSingleHoldingRegister")
+
+    async def WriteMultipleHoldingRegisters(self, dataModel, toRegion, values):
         raise IllegalFunction("WriteMultipleHoldingRegisters")

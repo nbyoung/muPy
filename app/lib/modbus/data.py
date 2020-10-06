@@ -15,7 +15,7 @@ class Region:
             )
         if max < count:
             raise IllegalDataAddress(
-                'Illegal region address %d count exceeds %d max' % (
+                'Illegal region address count of %d exceeds max of %d' % (
                     count, max
                 )
             )
@@ -42,7 +42,7 @@ class Block(Region):
     def __init__(self, count=0):
         super().__init__(0, count, count)
     
-    def valid(self, region):
+    def validRegion(self, region):
         if self.last < region.last:
             raise IllegalDataAddress(
                 'Region address (%d+%d=%d) exceeds data block (%d)' % (
