@@ -11,8 +11,11 @@ from demo.modbus.slave import pdu, data
 
 LOGGER = "main"
 
-if sys.implementation.name == 'micropython':
+_IS_MICROPYTHON = sys.implementation.name == 'micropython'
+
+if _IS_MICROPYTHON:
     import uasyncio as asyncio
+    import gc
 else:
     import asyncio
     handler = logging.StreamHandler(sys.stdout)
@@ -24,7 +27,11 @@ async def forever():
     flag = False
     i = 0
     while True:
-        logger.debug("forever %s" % ("tick" if flag else "tock"))
+        if _IS_MICROPYTHON:
+            message = "forever %s" % ("tick" if flag else gc.mem_free())
+        else:
+            message = "forever %s" % ("tick" if flag else "tock")
+        logger.debug(message)
         flag = not flag
         await asyncio.sleep(1)
 
