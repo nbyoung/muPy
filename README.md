@@ -1,4 +1,4 @@
-# uPy
+# muPy
 _Multi-target application framework for MicroPython_
 
 ### Productivity
