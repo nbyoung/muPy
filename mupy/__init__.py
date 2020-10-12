@@ -5,7 +5,7 @@
 ####
 #### name:      mupy/__init__.py
 ####
-#### usage:     mupy-host | mupy-target | mupy [options] subcommand [suboptions]
+#### usage:     mupy-host | mupy-target | mupy [options] subcommand ...
 ####
 #### synopsis:  Invoke the muPy framework commands.
 ####
@@ -19,68 +19,82 @@
 ####            https://mit-license.org/
 ####
 
-
-def _commands(commands, help='Command help'):
+def command(commands, help='Subcommand help', subcommands={}):
     def _command(cls):
         class _Command(cls):
             COMMAND = commands[0]
             HELP = help
-            @staticmethod
-            def isCommand(command):
-                return command in commands
+            SUBCOMMANDS = subcommands
         return _Command
     return _command
 
-@_commands(
+class Command:
+
+    HELP = 'Commands: mupy-host, mupy-target, mupy'
+
+    def __init__(self, args):
+        self._args = args
+
+    def _do(self, subcommand):
+        return getattr(self, subcommand)()
+
+@command(
     ('mupy-host', ),
-    help='Development environment',
+    help='Host',
+    subcommands = {
+        'install': {},
+    },
 )
-class Host:
+class Host(Command):
     pass
 
-@_commands(
+
+@command(
     ('mupy-target', ),
-    help='MicroPython targets',
+    help='Target',
+    subcommands = {
+        'list': {},
+    },
 )
-class Target:
+class Target(Command):
     pass
 
-@_commands(
+
+@command(
     ('mupy', 'mu.py'),
-    help='MicroPython applications'
+    help='Application',
+    subcommands = {
+        'run': {},
+    },
 )
-class MuPy:
+class MuPy(Command):
     pass
+
 
 from argparse import ArgumentParser
 import os
 
-def _argumentParser(cls):
-    parser = ArgumentParser(prog=cls.COMMAND)
+def _main(cls):
+    parser = ArgumentParser(prog=cls.COMMAND, epilog=Command.HELP)
     parser.add_argument(
         '-d', '--directory',
         default=os.environ.get('MUPY_DIRECTORY', os.getcwd()),
         help='muPy working directory',
     )
-    return parser
+    subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
+    for subcommand, options in cls.SUBCOMMANDS.items():
+        subparsers.add_parser(subcommand, **options)
+    args = parser.parse_args()
+    if args.subcommand:
+        cls(args)._do(args.subcommand)
+    else:
+        parser.print_help()
 
 def main_host():
-    parser = _argumentParser(Host)
-    subparsers = parser.add_subparsers(help=Host.HELP)
-    parser_install = subparsers.add_parser('install')
-    args = parser.parse_args()
-    print(args)
+    _main(Host)
 
 def main_target():
-    parser = _argumentParser(Target)
-    subparsers = parser.add_subparsers(help=Target.HELP)
-    parser_list = subparsers.add_parser('list')
-    args = parser.parse_args()
-    print(args)
+    _main(Target)
 
 def main():
-    parser = _argumentParser(MuPy)
-    subparsers = parser.add_subparsers(help=MuPy.HELP)
-    parser_run = subparsers.add_parser('run')
-    args = parser.parse_args()
-    print(args)
+    _main(MuPy)
