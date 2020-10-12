@@ -19,6 +19,12 @@
 ####            https://mit-license.org/
 ####
 
+import os
+
+import docker as Docker
+
+from . import version
+
 def command(commands, help='Subcommand help', subcommands={}):
     def _command(cls):
         class _Command(cls):
@@ -30,7 +36,8 @@ def command(commands, help='Subcommand help', subcommands={}):
 
 class Command:
 
-    HELP = 'Commands: mupy-host, mupy-target, mupy'
+    VERSION = version.VERSION
+    EPILOG = 'See also: mupy-host, mupy-target, mupy'
 
     def __init__(self, args):
         self._args = args
@@ -46,7 +53,10 @@ class Command:
     },
 )
 class Host(Command):
-    pass
+
+    def install(self):
+        docker = Docker.from_env()
+        print(docker.images.list())
 
 
 @command(
@@ -70,12 +80,14 @@ class Target(Command):
 class MuPy(Command):
     pass
 
-
-from argparse import ArgumentParser
-import os
-
 def _main(cls):
-    parser = ArgumentParser(prog=cls.COMMAND, epilog=Command.HELP)
+    from argparse import ArgumentParser
+    parser = ArgumentParser(prog=cls.COMMAND, epilog=Command.EPILOG)
+    parser.add_argument(
+        '-v', '--version',
+        action='version',
+        version='%(prog)s {0}'.format(version.VERSION),
+    )
     parser.add_argument(
         '-d', '--directory',
         default=os.environ.get('MUPY_DIRECTORY', os.getcwd()),

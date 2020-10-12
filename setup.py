@@ -1,11 +1,13 @@
 import setuptools
 
+from mupy import version
+
 with open("README.md", "r") as readme:
     long_description = readme.read()
 
 setuptools.setup(
     name="mupy",
-    version="0.0.1",
+    version=str(version.VERSION),
     author="Norman Young",
     author_email="nbyoung@nbyoung.com",
     description="Multi-target application framework for MicroPython",
@@ -18,6 +20,10 @@ setuptools.setup(
         "Operating System :: POSIX",
     ],
     python_requires='>=3.3',
+    install_requires=[
+        'docker',
+        'semantic_version',
+    ],
     packages=setuptools.find_packages(),
     entry_points={
         'console_scripts': [
