@@ -20,15 +20,19 @@
 ####
 
 import os
+import pathlib
 
 import docker as Docker
 
 from . import version
+from .configuration import (
+    Configuration, ConfigurationMissingError, ConfigurationOverwriteError,
+    )
 
-def command(commands, help='Subcommand help', subcommands={}):
+def command(name, help='Subcommand help', subcommands={}):
     def _command(cls):
         class _Command(cls):
-            COMMAND = commands[0]
+            COMMAND = name
             HELP = help
             SUBCOMMANDS = subcommands
         return _Command
@@ -37,7 +41,7 @@ def command(commands, help='Subcommand help', subcommands={}):
 class Command:
 
     VERSION = version.VERSION
-    EPILOG = 'See also: mupy-host, mupy-target, mupy'
+    EPILOG = 'See also: {0}-host, {0}-target, {0}'.format(version.NAME)
 
     def __init__(self, args):
         self._args = args
@@ -46,24 +50,24 @@ class Command:
         return getattr(self, subcommand)()
 
 @command(
-    ('mupy-host', ),
+    '{0}-host'.format(version.NAME),
     help='Host',
     subcommands = {
-        'install': {},
+        'install': ({}, {
+            '--force': { 'action': 'store_true'},
+        }),
     },
 )
 class Host(Command):
 
     def install(self):
-        docker = Docker.from_env()
-        print(docker.images.list())
-
+        pass
 
 @command(
-    ('mupy-target', ),
+    '{0}-target'.format(version.NAME),
     help='Target',
     subcommands = {
-        'list': {},
+        'list': ({}, {}),
     },
 )
 class Target(Command):
@@ -71,10 +75,10 @@ class Target(Command):
 
 
 @command(
-    ('mupy', 'mu.py'),
+    version.NAME,
     help='Application',
     subcommands = {
-        'run': {},
+        'run': ({}, {}),
     },
 )
 class MuPy(Command):
@@ -93,12 +97,32 @@ def _main(cls):
         default=os.environ.get('MUPY_DIRECTORY', os.getcwd()),
         help='muPy working directory',
     )
+    parser.add_argument(
+        '-c', '--configuration',
+        default=os.environ.get('MUPY_CONFIGURATION', 'mupy.yml'),
+        help='muPy configuration',
+    )
     subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
-    for subcommand, options in cls.SUBCOMMANDS.items():
-        subparsers.add_parser(subcommand, **options)
+    for subcommand, (arguments, suboptions) in cls.SUBCOMMANDS.items():
+        subparser = subparsers.add_parser(subcommand, **arguments)
+        for suboption, subarguments in suboptions.items():
+            subparser.add_argument(suboption, **subarguments)
     args = parser.parse_args()
     if args.subcommand:
-        cls(args)._do(args.subcommand)
+        try:
+            path = pathlib.Path(args.directory, args.configuration)
+            if cls == Host and args.subcommand == 'install':
+                Configuration.install(path, args.force)
+            configuration = Configuration.fromPath(path)
+            command = cls(args)
+            command._do(args.subcommand)
+        except (
+                ConfigurationOverwriteError, ConfigurationMissingError
+        ) as exception:
+            print(exception)
+        finally:
+            print("Install the host configuration: '{0} install'"
+                  .format(Host.COMMAND))
     else:
         parser.print_help()
 

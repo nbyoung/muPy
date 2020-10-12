@@ -6,7 +6,7 @@ with open("README.md", "r") as readme:
     long_description = readme.read()
 
 setuptools.setup(
-    name="mupy",
+    name=version.NAME,
     version=str(version.VERSION),
     author="Norman Young",
     author_email="nbyoung@nbyoung.com",
@@ -23,6 +23,7 @@ setuptools.setup(
     install_requires=[
         'docker',
         'semantic_version',
+        'yaml',
     ],
     packages=setuptools.find_packages(),
     entry_points={
