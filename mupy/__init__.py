@@ -26,7 +26,10 @@ import docker as Docker
 
 from . import version
 from .configuration import (
-    Configuration, ConfigurationMissingError, ConfigurationOverwriteError,
+    Configuration,
+    ConfigurationError,
+    ConfigurationMissingError, ConfigurationOverwriteError,
+    ConfigurationSyntaxError,
     )
 
 def command(name, help='Subcommand help', subcommands={}):
@@ -111,16 +114,21 @@ def _main(cls):
     if args.subcommand:
         try:
             path = pathlib.Path(args.directory, args.configuration)
-            if cls == Host and args.subcommand == 'install':
-                Configuration.install(path, args.force)
-            configuration = Configuration.fromPath(path)
+            doInstall = cls == Host and args.subcommand == 'install'
+            doForce = False
+            if doInstall:
+                doForce = args.force
+                Configuration.install(path, doForce)
+                print('Created {0}'.format(path))
+            configuration = Configuration.fromPath(path, doInstall, doForce)
             command = cls(args)
             command._do(args.subcommand)
         except (
-                ConfigurationOverwriteError, ConfigurationMissingError
+                ConfigurationError,
+                ConfigurationOverwriteError, ConfigurationMissingError,
+                ConfigurationSyntaxError,
         ) as exception:
             print(exception)
-        finally:
             print("Install the host configuration: '{0} install'"
                   .format(Host.COMMAND))
     else:

@@ -1,8 +1,30 @@
-import random
+import io
+import pathlib
+
+import docker as Docker
+import semantic_version
 import yaml
 
+from . import version
+
 class Host:
-    pass
+
+    @classmethod
+    def fromConfiguration(cls, dictionary, doInstall=False):
+        return cls(
+            semantic_version.Version(dictionary['version']),
+            dictionary['docker']['cpython'],
+            doInstall,
+        )
+
+    def __init__(self, version, dockerCPython, doInstall=False):
+        self._version = version
+        if doInstall:
+            docker = Docker.from_env()
+            docker.images.build(
+                fileobj=io.BytesIO(dockerCPython.encode('utf-8')),
+                rm=True,
+            )
 
 class Target:
     pass
@@ -19,8 +41,12 @@ class Build:
 _DEFAULT = """
 host:
   version:      "0.0.1"
-  unique:       "{unique:02d}"
-  directory:    "host"
+  docker:
+    cpython: |
+      FROM python:3.7.9-slim-stretch
+      ARG HOME=/flash
+      ENV PYTHONPATH=${HOME}/lib
+      CMD ["python3"]
 
 target:
   defaults:     []
@@ -37,11 +63,13 @@ app:
   default:
 #  demo:
 #    directory:  "dev/app/demo"
-""".format(unique=random.randint(10,100))
+"""
 
+class ConfigurationError(OSError): pass
 class ConfigurationInstallError(OSError): pass
 class ConfigurationMissingError(ValueError): pass
 class ConfigurationOverwriteError(OSError): pass
+class ConfigurationSyntaxError(ValueError): pass
     
 class Configuration:
 
@@ -55,15 +83,37 @@ class Configuration:
                 'Cannot create {0}'.format(path))
 
     @classmethod
-    def fromPath(cls, path):
+    def fromPath(cls, path, doInstall=False, doForce=False):
         try:
             with open(path) as file:
                 content = yaml.safe_load(file)
-                import pprint
-                pprint.pprint(content)
+                return cls.fromConfiguration(path, content, doInstall, doForce)
         except IsADirectoryError:
             raise ConfigurationMissingError(
                 'Path is a directory {0}'.format(path))
         except FileNotFoundError:
             raise ConfigurationMissingError(
                 'Configuration file not found {0}'.format(path))
+        except (
+                yaml.scanner.ScannerError,
+                yaml.parser.ParserError,
+        ) as exception:
+            raise ConfigurationSyntaxError(str(exception))
+
+    @classmethod
+    def fromConfiguration(
+            cls, path, dictionary, doInstall=False, doForce=False
+    ):
+        try:
+            return cls(
+                host=Host.fromConfiguration(dictionary['host'], doInstall)
+            )
+        except KeyError as exception:
+            raise ConfigurationError(
+                "Missing configuration for {0}".format(str(exception)))
+
+    def __init__(self, host=None):
+        self._host = host
+
+    @property
+    def host(self): return self._host
