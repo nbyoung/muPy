@@ -85,7 +85,17 @@ class Configuration:
                 'Cannot create {0}'.format(path))
 
     @classmethod
-    def fromPath(cls, path, doInstall=False, doForce=False):
+    def fromSearch(cls, directory, filename, doInstall=False, doForce=False):
+        def searchPath(directory, filename):
+            for path in (
+                    pathlib.Path(d, filename)
+                    for d in [directory] + list(directory.parents)
+            ):
+                if path.exists() and path.is_file():
+                    return path
+            raise ConfigurationMissingError(
+                '{1} not found in or above {0}'.format(directory, filename))
+        path = searchPath(directory, filename)
         try:
             with open(path) as file:
                 content = yaml.safe_load(file)
@@ -108,14 +118,19 @@ class Configuration:
     ):
         try:
             return cls(
-                host=Host.fromConfiguration(dictionary['host'], doInstall)
+                path, host=Host.fromConfiguration(dictionary['host'], doInstall)
             )
         except KeyError as exception:
             raise ConfigurationError(
                 "Missing configuration for {0}".format(str(exception)))
 
-    def __init__(self, host=None):
+    def __init__(self, path, host=None):
+        print('Configuration(%s)' % str(path))
+        self._path = path
         self._host = host
+
+    @property
+    def path(self): return self._path
 
     @property
     def host(self): return self._host

@@ -113,14 +113,18 @@ def _main(cls):
     args = parser.parse_args()
     if args.subcommand:
         try:
-            path = pathlib.Path(args.directory, args.configuration)
+            directory = pathlib.Path(args.directory).resolve()
+            filename = pathlib.Path(args.configuration).name
+            path = pathlib.Path(directory, filename)
             doInstall = cls == Host and args.subcommand == 'install'
             doForce = False
             if doInstall:
                 doForce = args.force
                 Configuration.install(path, doForce)
                 print('Created {0}'.format(path))
-            configuration = Configuration.fromPath(path, doInstall, doForce)
+            configuration = Configuration.fromSearch(
+                directory, filename, doInstall, doForce
+            )
             command = cls(args)
             command._do(args.subcommand)
         except (
