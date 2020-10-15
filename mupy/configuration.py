@@ -40,12 +40,11 @@ class Build:
 
 _DEFAULT = """
 host:
-  version:      "0.0.1"
+  version:      "{version}"
   docker:
     cpython: |
       FROM python:3.7.9-slim-stretch
-      ARG HOME=/flash
-      ENV PYTHONPATH=${HOME}/lib
+      ENV PYTHONPATH={pythonpath}
       CMD ["python3"]
 
 target:
@@ -63,7 +62,10 @@ app:
   default:
 #  demo:
 #    directory:  "dev/app/demo"
-"""
+""".format(
+    version=version.VERSION,
+    pythonpath='/flash/lib'
+)
 
 class ConfigurationError(OSError): pass
 class ConfigurationInstallError(OSError): pass
