@@ -19,6 +19,7 @@
 ####            https://mit-license.org/
 ####
 
+import io
 import os
 import pathlib
 
@@ -46,7 +47,8 @@ class Command:
     VERSION = version.VERSION
     EPILOG = 'See also: {0}-host, {0}-target, {0}'.format(version.NAME)
 
-    def __init__(self, args):
+    def __init__(self, configuration, args):
+        self._configuration = configuration
         self._args = args
 
     def _do(self, subcommand):
@@ -57,14 +59,24 @@ class Command:
     help='Host',
     subcommands = {
         'install': ({}, {
-            '--force': { 'action': 'store_true'},
+            '--force': { 'action': 'store_true' },
         }),
+        'remove': ({}, {
+            '--force': { 'action': 'store_true' },
+        }),
+        'show': ({}, {}),
     },
 )
 class Host(Command):
 
     def install(self):
-        pass
+        ghost = self._configuration['target']['ghost']
+        if ghost['cpython']['type'] == 'docker':
+            docker = Docker.from_env()
+            docker.images.build(
+                fileobj=io.BytesIO(ghost['cpython']['Dockerfile'].encode('utf-8')),
+                rm=True,
+            )
 
 @command(
     '{0}-target'.format(version.NAME),
@@ -116,16 +128,11 @@ def _main(cls):
             directory = pathlib.Path(args.directory).resolve()
             filename = pathlib.Path(args.configuration).name
             path = pathlib.Path(directory, filename)
-            doInstall = cls == Host and args.subcommand == 'install'
-            doForce = False
-            if doInstall:
-                doForce = args.force
-                Configuration.install(path, doForce)
+            if cls == Host and args.subcommand == 'install':
+                Configuration.install(path, args.force)
                 print('Created {0}'.format(path))
-            configuration = Configuration.fromSearch(
-                directory, filename, doInstall, doForce
-            )
-            command = cls(args)
+            configuration = Configuration.fromSearch(directory, filename)
+            command = cls(configuration, args)
             command._do(args.subcommand)
         except (
                 ConfigurationError,
