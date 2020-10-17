@@ -33,7 +33,12 @@ from .configuration import (
     ConfigurationSyntaxError,
     )
 
-def command(name, help='Subcommand help', subcommands={}):
+_MUPY = version.NAME
+_MUPY_HOST = f'{_MUPY}-host'
+_MUPY_TARGET = f'{_MUPY}-target'
+_MUPY_YAML = 'mupy.yml'
+
+def command(name, help='Command help', subcommands={}):
     def _command(cls):
         class _Command(cls):
             COMMAND = name
@@ -45,7 +50,10 @@ def command(name, help='Subcommand help', subcommands={}):
 class Command:
 
     VERSION = version.VERSION
-    EPILOG = 'See also: {0}-host, {0}-target, {0}'.format(version.NAME)
+    EPILOG = f'''
+Enviroment: MUPY_DIRECTORY, MUPY_CONFIGURATION
+Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
+'''
 
     def __init__(self, configuration, args):
         self._configuration = configuration
@@ -55,32 +63,40 @@ class Command:
         return getattr(self, subcommand)()
 
 @command(
-    '{0}-host'.format(version.NAME),
-    help='Host',
+    _MUPY_HOST,
+    help='Modify the host setup',
     subcommands = {
-        'install': ({}, {
+        'init': ({'help': f"1. Create the host configuration file, '{_MUPY_YAML}'"}, {
+            '--force': { 'help': 'Overwrite any existing file', 'action': 'store_true' },
+        }),
+        'install': ({'help': f"2. Install the files specified in '{_MUPY_YAML}'"}, {
+            '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
+        }),
+        'show': ({'help': f'3. Display the host setup details'}, {
+        }),
+        'remove': ({'help': f'4. Remove the host setup'}, {
             '--force': { 'action': 'store_true' },
         }),
-        'remove': ({}, {
-            '--force': { 'action': 'store_true' },
-        }),
-        'show': ({}, {}),
     },
 )
 class Host(Command):
 
     def install(self):
+        print(f"Installing from '{self._configuration.path}'")
+        # TODO
         ghost = self._configuration['target']['ghost']
         if ghost['cpython']['type'] == 'docker':
+            print('Creating cpython Docker image')
             docker = Docker.from_env()
             docker.images.build(
                 fileobj=io.BytesIO(ghost['cpython']['Dockerfile'].encode('utf-8')),
                 rm=True,
             )
+            print('TODO: Print docker image results')
 
 @command(
-    '{0}-target'.format(version.NAME),
-    help='Target',
+    _MUPY_TARGET,
+    help='Modify the target runtimes',
     subcommands = {
         'list': ({}, {}),
     },
@@ -91,7 +107,7 @@ class Target(Command):
 
 @command(
     version.NAME,
-    help='Application',
+    help='Build and run an application',
     subcommands = {
         'run': ({}, {}),
     },
@@ -100,8 +116,12 @@ class MuPy(Command):
     pass
 
 def _main(cls):
-    from argparse import ArgumentParser
-    parser = ArgumentParser(prog=cls.COMMAND, epilog=Command.EPILOG)
+    from argparse import ArgumentParser, RawTextHelpFormatter
+    parser = ArgumentParser(
+        prog=cls.COMMAND,
+        epilog=Command.EPILOG,
+        formatter_class=RawTextHelpFormatter,
+    )
     parser.add_argument(
         '-v', '--version',
         action='version',
@@ -110,12 +130,12 @@ def _main(cls):
     parser.add_argument(
         '-d', '--directory',
         default=os.environ.get('MUPY_DIRECTORY', os.getcwd()),
-        help='muPy working directory',
+        help="Root directory\ndefault='%(default)s'",
     )
     parser.add_argument(
         '-c', '--configuration',
-        default=os.environ.get('MUPY_CONFIGURATION', 'mupy.yml'),
-        help='muPy configuration',
+        default=os.environ.get('MUPY_CONFIGURATION', _MUPY_YAML),
+        help="Configuration file name\ndefault='%(default)s'",
     )
     subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
     for subcommand, (arguments, suboptions) in cls.SUBCOMMANDS.items():
@@ -124,13 +144,16 @@ def _main(cls):
             subparser.add_argument(suboption, **subarguments)
     args = parser.parse_args()
     if args.subcommand:
+        filename = pathlib.Path(args.configuration).name
         try:
             directory = pathlib.Path(args.directory).resolve()
-            filename = pathlib.Path(args.configuration).name
-            path = pathlib.Path(directory, filename)
-            if cls == Host and args.subcommand == 'install':
+            if cls == Host and args.subcommand == 'init':
+                path = pathlib.Path(directory, filename)
                 Configuration.install(path, args.force)
-                print('Created {0}'.format(path))
+                print(f'Created {path}')
+                print(f'  Edit the configuration in {filename}')
+                print(f"  Then run '{Host.COMMAND} install'")
+                return
             configuration = Configuration.fromSearch(directory, filename)
             command = cls(configuration, args)
             command._do(args.subcommand)
@@ -139,9 +162,7 @@ def _main(cls):
                 ConfigurationOverwriteError, ConfigurationMissingError,
                 ConfigurationSyntaxError,
         ) as exception:
-            print(exception)
-            print("Install the host configuration: '{0} install'"
-                  .format(Host.COMMAND))
+            print(str(exception))
     else:
         parser.print_help()
 
