@@ -1,3 +1,4 @@
+from collections import namedtuple
 import pathlib
 
 import semantic_version
@@ -11,25 +12,25 @@ version:      "{version}"
 target:
   default:      upy
   ghost:
-    cpython:
-      as:       cpy
-      type:     docker
-      Dockerfile: |
-        FROM python:3.7.9-slim-stretch
-        ENV PYTHONPATH={pythonpath}
-        CMD ["python3"]
-    micropython:
-      as:       upy
-      type:     docker
-      # Dockerfile: |
-      #  FROM python:3.7.9-slim-stretch
-      #  ENV PYTHONPATH={pythonpath}
-      #  CMD ["python3"]
+    native:
+    docker:
+      cpython:
+        aka:      cpy
+        Dockerfile: |
+          FROM python:3.7.9-slim-stretch
+          ENV PYTHONPATH={pythonpath}
+          CMD ["python3"]
+      micropython:
+        aka:      upy
+        # Dockerfile: |
+        #  FROM python:3.7.9-slim-stretch
+        #  ENV PYTHONPATH={pythonpath}
+        #  CMD ["python3"]
   cross:
     directory:  "target"
     micropython:
       stm32f769:
-        as:   stm32
+        aka:  stm32
   
 lib:
   directory:    "lib"
@@ -60,6 +61,16 @@ class ConfigurationOverwriteError(OSError): pass
 class ConfigurationSyntaxError(ValueError): pass
     
 class Configuration:
+
+    @staticmethod
+    def _content(value, typename='_Content'):
+        if isinstance(value, dict):
+            cls = namedtuple(typename, tuple(value.keys()))
+            return cls(
+                *[Configuration._content(v, f'{typename}_{k}') for k, v in value.items()]
+            )
+        else:
+            return value
 
     @staticmethod
     def install(path, doForce=False):
@@ -104,10 +115,14 @@ class Configuration:
 
     def __init__(self, path, content):
         self._path = path
-        self._content = content
+        self._content = Configuration._content(content)
 
     @property
     def path(self): return self._path
 
+    @property
+    def content(self): return self._content
+
+    @property
     def __getitem__(self, key):
         return self._content[key]

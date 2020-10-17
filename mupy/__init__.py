@@ -84,12 +84,14 @@ class Host(Command):
     def install(self):
         print(f"Installing from '{self._configuration.path}'")
         # TODO
-        ghost = self._configuration['target']['ghost']
-        if ghost['cpython']['type'] == 'docker':
-            print('Creating cpython Docker image')
+        ghost = self._configuration.content.target.ghost
+        if ghost.docker.cpython:
+            print('Creating CPython Docker image')
             docker = Docker.from_env()
             docker.images.build(
-                fileobj=io.BytesIO(ghost['cpython']['Dockerfile'].encode('utf-8')),
+                fileobj=io.BytesIO(
+                    ghost.docker.cpython.Dockerfile.encode('utf-8')
+                ),
                 rm=True,
             )
             print('TODO: Print docker image results')
@@ -113,7 +115,10 @@ class Target(Command):
     },
 )
 class MuPy(Command):
-    pass
+
+    def run(self):
+        print(f"Running from '{self._configuration.path}'")
+
 
 def _main(cls):
     from argparse import ArgumentParser, RawTextHelpFormatter
