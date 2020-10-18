@@ -19,13 +19,11 @@
 ####            https://mit-license.org/
 ####
 
-import io
 import os
 import pathlib
 
-import docker as Docker
-
 from . import version
+from . import content
 from .configuration import (
     Configuration,
     ConfigurationError,
@@ -83,18 +81,13 @@ class Host(Command):
 
     def install(self):
         print(f"Installing from '{self._configuration.path}'")
-        # TODO
-        ghost = self._configuration.content.target.ghost
-        if ghost.docker.cpython:
-            print('Creating CPython Docker image')
-            docker = Docker.from_env()
-            docker.images.build(
-                fileobj=io.BytesIO(
-                    ghost.docker.cpython.Dockerfile.encode('utf-8')
-                ),
-                rm=True,
-            )
-            print('TODO: Print docker image results')
+        for target in [
+                content.Target.fromConfiguration(
+                    self._configuration, targetConfiguration.name
+                )
+                for targetConfiguration in self._configuration.targets.values()
+        ]:
+            target.install()
 
 @command(
     _MUPY_TARGET,
