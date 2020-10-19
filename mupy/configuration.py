@@ -10,7 +10,7 @@ _DEFAULT = """
 
 default:
   target:       cpython
-  app:          hello
+  app:          demo
 
 directory:
   lib:          "lib"

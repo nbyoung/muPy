@@ -104,13 +104,22 @@ class Target(Command):
     version.NAME,
     help='Build and run an application',
     subcommands = {
-        'run': ({}, {}),
+        'run': ({'help': 'Run an application on a target'}, {
+            '--app': { 'help': 'Select a non-default app', 'type': str },
+            '--target': { 'help': 'Select a non-default target', 'type': str },
+        }),
     },
 )
 class MuPy(Command):
 
     def run(self):
-        print(f"Running from '{self._configuration.path}'")
+        app = content.App.fromConfiguration(
+            self._configuration, self._args.app
+        )
+        target = content.Target.fromConfiguration(
+            self._configuration, self._args.target
+        )
+        target.run(app)
 
 
 def _main(cls):

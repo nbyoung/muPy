@@ -5,7 +5,23 @@ import docker as Docker
 from . import version
 
 class App:
-    pass
+
+    @classmethod
+    def fromConfiguration(cls, configuration, name=None):
+        def _configuration():
+            try:
+                appName = name or configuration.default.app
+                return configuration.apps[appName]
+            except AttributeError:
+                return configuration.apps.values()[0]
+        appConfiguration = _configuration()
+        return cls(appConfiguration.name)
+
+    def __init__(self, name):
+        self._name = name
+
+    @property
+    def name(self): return self._name
 
 class Target:
 
@@ -48,7 +64,7 @@ class DockerTarget(Target):
 
     @property
     def dockerfile(self): return self._dockerfile
-
+    
     @property
     def repository(self): return f'{version.NAME}'
 
@@ -63,6 +79,19 @@ class DockerTarget(Target):
             rm=True,
         )
         print(f'Created Docker image {self.tag} {image.short_id.split(":")[1]}')
+
+    def run(self, app):
+        print(f"Target '{self.name}' running '{app.name}'")
+        docker = Docker.from_env()
+        print(docker.containers.run(
+            self.tag, ['echo', app.name],
+            detach=False,
+            name=f'{self.name}-{app.name}',
+            network_mode='host',
+            auto_remove=True,
+            stderr=True,
+            stdout=True,
+        ))
 
 class CrossTarget(Target):
 
