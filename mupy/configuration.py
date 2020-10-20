@@ -19,15 +19,22 @@ directory:
   build:        "build"
   
 libs:
-  - name:       log
+  - name:       logger
     type:       python
     meta:
-      directory:        "log"
+      directory:        "logger"
 
 apps:
   - name:       demo
     meta:
-      directory:        "hello"
+      directory:        "demo"
+
+  - name:       demo_log
+    libs:
+      - name:   logger
+        rename: log
+    meta:
+      directory:        "demo_log"
 
 targets:
   - name:       cpython

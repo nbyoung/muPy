@@ -81,17 +81,24 @@ class DockerTarget(Target):
         print(f'Created Docker image {self.tag} {image.short_id.split(":")[1]}')
 
     def run(self, app):
-        print(f"Target '{self.name}' running '{app.name}'")
         docker = Docker.from_env()
-        print(docker.containers.run(
-            self.tag, ['echo', app.name],
-            detach=False,
+        container = docker.containers.run(
+            self.tag,
+            ['bash', '-c', f'while true; do sleep 1; echo {app.name}; done'],
+            detach=True,
             name=f'{self.name}-{app.name}',
             network_mode='host',
             auto_remove=True,
             stderr=True,
             stdout=True,
-        ))
+        )
+        print(f"Running '{app.name}' on target '{self.name}' in Docker {container.name}")
+        try:
+            for output in container.logs(stream=True):
+                print(output.decode('utf-8'), end='')
+        except KeyboardInterrupt:
+            print(f' Stopping Docker {container.name}')
+            container.stop(timeout=1)
 
 class CrossTarget(Target):
 

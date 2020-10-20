@@ -21,6 +21,7 @@
 
 import os
 import pathlib
+import sys
 
 from . import version
 from . import content
@@ -170,6 +171,8 @@ def _main(cls):
                 ConfigurationSyntaxError,
         ) as exception:
             print(str(exception))
+        #finally:
+        #    sys.exit(0)
     else:
         parser.print_help()
 
