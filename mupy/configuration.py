@@ -19,24 +19,23 @@ directory:
   build:        "build"
   
 libs:
+
   - name:       logger
-    type:       python
-    meta:
-      directory:        "logger"
+    directory:  "logger"
 
 apps:
+
   - name:       demo
-    meta:
-      directory:        "demo"
+    directory:  "demo"
 
   - name:       demo_log
+    directory:  "demo_log"
     libs:
-      - name:   logger
-        rename: log
-    meta:
-      directory:        "demo_log"
+      - logger
+      - bar
 
 targets:
+
   - name:       cpython
     type:       docker
     meta:
@@ -44,12 +43,14 @@ targets:
         FROM python:3.7.9-slim-stretch
         ENV PYTHONPATH={pythonpath}
         CMD ["python3"]
+
   - name:       unix
     type:       docker
     meta:
       dockerfile: |
         FROM debian:stretch-slim
         CMD ["echo", "Hello, Unix!"]
+
   - name:       stm32
     type:       cross
     meta:
@@ -114,41 +115,15 @@ class Configuration:
             raise ConfigurationSyntaxError(str(exception))
 
     def __init__(self, path, yamlContent):
-
-        def content(typeName, value):
-            if isinstance(value, dict):
-                cls = namedtuple(typeName, tuple(value.keys()))
-                return cls(
-                    *[content(f'{typeName}_{k}', v) for k, v in value.items()]
-                )
-            else:
-                return value
-
-        def contentDict(key):
-            return content(
-                f'{self.__class__.__name__}{key.capitalize()}',
-                yamlContent[key],
-            )
-
-        def contentList(key):
-            return OrderedDict(
-                [(
-                    d["name"],
-                    content(
-                        f'{self.__class__.__name__}{d["name"].capitalize()}{key.capitalize()}',
-                        d,
-                    )
-                ) for d in yamlContent[key]
-                ]
-            )
-            
         self._path = path
-        self._version = contentDict('version')
-        self._default = contentDict('default')
-        self._directory = contentDict('directory')
-        self._libs = contentList('libs')
-        self._apps = contentList('apps')
-        self._targets = contentList('targets')
+        self._version = yamlContent.get(
+            'version', { 'name': version.NAME, 'version': version.VERSION }
+        )
+        self._default = yamlContent.get('default', {})
+        self._directory = yamlContent.get('directory', {})
+        self._libs = yamlContent.get('libs', [])
+        self._apps = yamlContent.get('apps', [])
+        self._targets = yamlContent.get('targets', [])
 
     @property
     def path(self): return self._path

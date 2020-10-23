@@ -4,44 +4,81 @@ import docker as Docker
 
 from . import version
 
+class AppConfigurationError(ValueError): pass
+
 class App:
 
     @classmethod
     def fromConfiguration(cls, configuration, name=None):
-        def _configuration():
+        def _appC():
+            appName = name or configuration.default.get('app')
             try:
-                appName = name or configuration.default.app
-                return configuration.apps[appName]
-            except AttributeError:
-                return configuration.apps.values()[0]
-        appConfiguration = _configuration()
-        return cls(appConfiguration.name)
+                return next(
+                    (appC for appC in configuration.apps if appC.get('name') == appName),
+                    configuration.apps[0]
+                )
+            except IndexError:
+                raise AppConfigurationError('Missing app configuration')
+        appC = _appC()
+        name = appC.get('name', 'app')
+        directory = appC.get('directory', name)
+        libs = appC.get('libs', ())
+        return cls(name, directory, libs)
 
-    def __init__(self, name):
+    def __init__(self, name, directory, libs):
         self._name = name
+        self._directory = directory
+        self._libs = libs
 
     @property
     def name(self): return self._name
+
+class Host:
+
+    @classmethod
+    def fromConfiguration(cls, configuration):
+        parent = configuration.path.parent
+        def get(name):
+            return parent / getattr(configuration, name, name)
+        return cls(
+            parent, get('lib'), get('app'), get('dev'), get('build')
+        )
+
+    def __init__(self, parent, lib, app, dev, build):
+        self._parent = parent
+
+    def install(self, doForce=False):
+        pass
+
+class TargetConfigurationError(ValueError): pass
 
 class Target:
 
     @staticmethod
     def fromConfiguration(configuration, name=None):
-        def _configuration():
+        nullC = {'name': 'null', 'type': None}
+        def _targetC():
             try:
-                targetName = name or configuration.default.target
-                return configuration.targets[targetName]
-            except AttributeError:
-                return configuration.targets.values()[0]
-        targetConfiguration = _configuration()
-        return {
-            'docker': DockerTarget,
-            'cross': CrossTarget,
-            }[targetConfiguration.type](
-                targetConfiguration.name,
-                targetConfiguration.type,
-                targetConfiguration.meta,
-            )
+                targetName = name or configuration.default.get('target')
+                return next(
+                    (targetC for targetC in configuration.targets
+                     if targetC.get('name') == targetName),
+                    nullC if targetName == 'null' else configuration.targets[0]
+                )
+            except IndexError:
+                return nullC
+        targetC = _targetC()
+        type = targetC.get('type')
+        name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
+        meta = targetC.get('meta')
+        try:
+            return {
+                None: NullTarget,
+                'docker': DockerTarget,
+                'cross': CrossTarget,
+            }[type](name, type, meta)
+        except KeyError:
+            raise TargetConfigurationError(f"Unknown target type: '{type}'")
 
     def __init__(self, name, type):
         self._name = name
@@ -56,11 +93,22 @@ class Target:
     def run(self, app):
         raise NotImplementedError
 
+class NullTarget(Target):
+
+    def __init__(self, name, type, meta):
+        super().__init__(name, type)
+
+    def install(self):
+        print(f"Installed null-type target, '{self.name}'")
+
+    def run(self, app):
+        print(f"Run {app} on null-type target, '{self.name}'")
+
 class DockerTarget(Target):
 
     def __init__(self, name, type, meta):
         super().__init__(name, type)
-        self._dockerfile = meta.dockerfile
+        self._dockerfile = meta['dockerfile']
 
     @property
     def dockerfile(self): return self._dockerfile

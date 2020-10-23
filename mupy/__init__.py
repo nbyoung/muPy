@@ -84,9 +84,9 @@ class Host(Command):
         print(f"Installing from '{self._configuration.path}'")
         for target in [
                 content.Target.fromConfiguration(
-                    self._configuration, targetConfiguration.name
+                    self._configuration, targetConfiguration.get('name')
                 )
-                for targetConfiguration in self._configuration.targets.values()
+                for targetConfiguration in self._configuration.targets
         ]:
             target.install()
 
@@ -171,8 +171,6 @@ def _main(cls):
                 ConfigurationSyntaxError,
         ) as exception:
             print(str(exception))
-        #finally:
-        #    sys.exit(0)
     else:
         parser.print_help()
 
