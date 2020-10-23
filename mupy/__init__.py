@@ -89,6 +89,7 @@ class Host(Command):
                 for targetConfiguration in self._configuration.targets
         ]:
             target.install()
+        print(self._configuration.directory)
 
 @command(
     _MUPY_TARGET,

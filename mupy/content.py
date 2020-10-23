@@ -90,6 +90,9 @@ class Target:
     @property
     def type(self): return self._type
                  
+    def install(self):
+        raise NotImplementedError
+                 
     def run(self, app):
         raise NotImplementedError
 
@@ -126,7 +129,7 @@ class DockerTarget(Target):
             tag=f'{self.tag}',
             rm=True,
         )
-        print(f'Created Docker image {self.tag} {image.short_id.split(":")[1]}')
+        print(f'Installed Docker image {self.tag} {image.short_id.split(":")[1]}')
 
     def run(self, app):
         docker = Docker.from_env()
