@@ -23,14 +23,15 @@ import os
 import pathlib
 import sys
 
-from . import version
-from . import content
 from .configuration import (
     Configuration,
     ConfigurationError,
     ConfigurationMissingError, ConfigurationOverwriteError,
     ConfigurationSyntaxError,
     )
+from . import content
+from .quiet import isQuiet, qprint
+from . import version
 
 _MUPY = version.NAME
 _MUPY_HOST = f'{_MUPY}-host'
@@ -50,7 +51,7 @@ class Command:
 
     VERSION = version.VERSION
     EPILOG = f'''
-Enviroment: MUPY_DIRECTORY, MUPY_CONFIGURATION
+Enviroment: MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
 Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 '''
 
@@ -81,7 +82,7 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 class Host(Command):
 
     def install(self):
-        print(f"Installing from '{self._configuration.path}'")
+        qprint(f"Installing from '{self._configuration.path}'")
         for target in [
                 content.Target.fromConfiguration(
                     self._configuration, targetConfiguration.get('name')
@@ -147,12 +148,19 @@ def _main(cls):
         default=os.environ.get('MUPY_CONFIGURATION', _MUPY_YAML),
         help="Configuration file name\ndefault='%(default)s'",
     )
+    parser.add_argument(
+        '-q', '--quiet',
+        default=os.environ.get('MUPY_QUIET', False),
+        action='store_true',
+        help="Configuration file name\ndefault='%(default)s'",
+    )
     subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
     for subcommand, (arguments, suboptions) in cls.SUBCOMMANDS.items():
         subparser = subparsers.add_parser(subcommand, **arguments)
         for suboption, subarguments in suboptions.items():
             subparser.add_argument(suboption, **subarguments)
     args = parser.parse_args()
+    quiet.isQuiet = bool(args.quiet)
     if args.subcommand:
         filename = pathlib.Path(args.configuration).name
         try:
@@ -160,9 +168,9 @@ def _main(cls):
             if cls == Host and args.subcommand == 'init':
                 path = pathlib.Path(directory, filename)
                 Configuration.install(path, args.force)
-                print(f'Created {path}')
-                print(f'  Edit the configuration in {filename}')
-                print(f"  Then run '{Host.COMMAND} install'")
+                qprint(f'Created {path}')
+                qprint(f'  Edit the configuration in {filename}')
+                qprint(f"  Then run '{Host.COMMAND} install'")
                 return
             configuration = Configuration.fromSearch(directory, filename)
             command = cls(configuration, args)
@@ -172,7 +180,7 @@ def _main(cls):
                 ConfigurationOverwriteError, ConfigurationMissingError,
                 ConfigurationSyntaxError,
         ) as exception:
-            print(str(exception))
+            print(str(exception), file=sys.stderr)
     else:
         parser.print_help()
 

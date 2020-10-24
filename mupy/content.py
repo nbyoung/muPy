@@ -5,6 +5,7 @@ import stat
 
 import docker as Docker
 
+from .quiet import qprint
 from . import version
 
 class AppConfigurationError(ValueError): pass
@@ -90,7 +91,7 @@ class Host:
         for path in (
                 self._parent, self._lib, self._app, self._dev, self._build
         ):
-            if makeWriteable(path): print(path)
+            if makeWriteable(path): qprint(path)
 
 class TargetConfigurationError(ValueError): pass
 
@@ -144,10 +145,10 @@ class NullTarget(Target):
         super().__init__(name, type)
 
     def install(self):
-        print(f"Installed null-type target, '{self.name}'")
+        qprint(f"Installed null-type target, '{self.name}'")
 
     def run(self, app):
-        print(f"Run {app} on null-type target, '{self.name}'")
+        qprint(f"Run {app} on null-type target, '{self.name}'")
 
 class DockerTarget(Target):
 
@@ -171,7 +172,7 @@ class DockerTarget(Target):
             tag=f'{self.tag}',
             rm=True,
         )
-        print(f'Installed Docker image {self.tag} {image.short_id.split(":")[1]}')
+        qprint(f'Installed Docker image {self.tag} {image.short_id.split(":")[1]}')
 
     def run(self, app):
         docker = Docker.from_env()
@@ -185,12 +186,12 @@ class DockerTarget(Target):
             stderr=True,
             stdout=True,
         )
-        print(f"Running '{app.name}' on target '{self.name}' in Docker {container.name}")
+        qprint(f"Running '{app.name}' on target '{self.name}' in Docker {container.name}")
         try:
             for output in container.logs(stream=True):
-                print(output.decode('utf-8'), end='')
+                qprint(output.decode('utf-8'), end='')
         except KeyboardInterrupt:
-            print(f' Stopping Docker {container.name}')
+            qprint(f' Stopping Docker {container.name}')
             container.stop(timeout=1)
 
 class CrossTarget(Target):
@@ -199,6 +200,6 @@ class CrossTarget(Target):
         super().__init__(name, type)
 
     def install(self):
-        print(f'{self.name}\n{self.type}')
+        qprint(f'{self.name}\n{self.type}')
 
 
