@@ -1,4 +1,7 @@
 import io
+import os
+import pathlib
+import stat
 
 import docker as Docker
 
@@ -46,9 +49,48 @@ class Host:
 
     def __init__(self, parent, lib, app, dev, build):
         self._parent = parent
+        self._lib = lib
+        self._app = app
+        self._dev = dev
+        self._build = build
 
     def install(self, doForce=False):
-        pass
+
+        def makeWriteable(path):
+
+            def reportError(message, useForce):
+                print(f"Error: {message}")
+                print(f"Try renaming '{path}'"
+                      + (" or use --force" if useForce else "")
+                )
+
+            result = False
+            if path.exists():
+                if path.is_dir():
+                    if os.access(path, os.W_OK, effective_ids=True):
+                        result = True
+                    else:
+                        if doForce:
+                            os.chmod(path, stat.S_IWUSR | os.stat(path).st_mode)
+                            result = True
+                        else:
+                            reportError(
+                                f"'{path}' exists but not writeable",
+                                True,
+                            )
+                else:
+                    reportError(
+                        f"'{path}' exists as a file",
+                        False,
+                    )
+            else:
+                path.mkdir(parents=doForce, exist_ok=True)
+                result = True
+            return result
+        for path in (
+                self._parent, self._lib, self._app, self._dev, self._build
+        ):
+            if makeWriteable(path): print(path)
 
 class TargetConfigurationError(ValueError): pass
 

@@ -89,7 +89,8 @@ class Host(Command):
                 for targetConfiguration in self._configuration.targets
         ]:
             target.install()
-        print(self._configuration.directory)
+        host = content.Host.fromConfiguration(self._configuration)
+        host.install(self._args.force)
 
 @command(
     _MUPY_TARGET,
