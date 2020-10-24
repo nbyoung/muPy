@@ -167,9 +167,9 @@ def _main(cls):
             directory = pathlib.Path(args.directory).resolve()
             if cls == Host and args.subcommand == 'init':
                 path = pathlib.Path(directory, filename)
-                Configuration.install(path, args.force)
-                qprint(f'Created {path}')
-                qprint(f'  Edit the configuration in {filename}')
+                Configuration.init(path, args.force)
+                qprint(f"Created '{path}'")
+                qprint(f"  Edit the configuration in '{filename}'")
                 qprint(f"  Then run '{Host.COMMAND} install'")
                 return
             configuration = Configuration.fromSearch(directory, filename)

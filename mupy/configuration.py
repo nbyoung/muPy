@@ -5,6 +5,7 @@ import semantic_version
 import yaml
 
 from . import version
+from .quiet import qprint
 
 _DEFAULT = """
 
@@ -74,9 +75,15 @@ class ConfigurationSyntaxError(ValueError): pass
 class Configuration:
 
     @staticmethod
-    def install(path, doForce=False):
+    def init(path, doForce=False):
         try:
-            with open(path, 'w' if doForce else 'x') as file:
+            mode = 'x'
+            if path.is_file() and doForce:
+                rename = path.with_suffix('.bak')
+                path.rename(rename)
+                qprint(f"Renamed to '{rename}'")
+                mode = 'w'
+            with open(path, mode) as file:
                 file.write(_DEFAULT)
         except:
             raise ConfigurationOverwriteError(
