@@ -175,20 +175,20 @@ def _main(cls):
             configuration = Configuration.fromSearch(directory, filename)
             command = cls(configuration, args)
             command._do(args.subcommand)
-        except (
-                ConfigurationError,
-                ConfigurationOverwriteError, ConfigurationMissingError,
-                ConfigurationSyntaxError,
-        ) as exception:
-            print(str(exception), file=sys.stderr)
+        except Exception as exception:
+            print(
+                f'{exception.__class__.__name__}: {str(exception)}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
     else:
         parser.print_help()
 
+def main(cls=MuPy):
+    _main(cls)
+
 def main_host():
-    _main(Host)
+    main(Host)
 
 def main_target():
-    _main(Target)
-
-def main():
-    _main(MuPy)
+    main(Target)
