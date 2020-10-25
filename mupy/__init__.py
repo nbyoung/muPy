@@ -83,6 +83,8 @@ class Host(Command):
 
     def install(self):
         qprint(f"Installing from '{self._configuration.path}'")
+        host = content.Host.fromConfiguration(self._configuration)
+        host.install(self._args.force)
         for target in [
                 content.Target.fromConfiguration(
                     self._configuration, targetConfiguration.get('name')
@@ -90,8 +92,12 @@ class Host(Command):
                 for targetConfiguration in self._configuration.targets
         ]:
             target.install()
-        host = content.Host.fromConfiguration(self._configuration)
-        host.install(self._args.force)
+        for fileC in self._configuration.files:
+            path = pathlib.Path(fileC['path'])
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, 'w') as file:
+                file.write(fileC['content'])
+            qprint(f"Wrote file '{path}'")
 
 @command(
     _MUPY_TARGET,
@@ -180,6 +186,7 @@ def _main(cls):
                 f'{exception.__class__.__name__}: {str(exception)}',
                 file=sys.stderr,
             )
+            raise exception # TODO Remove in production
             sys.exit(1)
     else:
         parser.print_help()

@@ -89,13 +89,13 @@ class Host:
                 result = True
             return result
 
-        result = True
+        isOkay = True
         for path in (
                 self._parent, self._lib, self._app, self._dev, self._build
         ):
             if makeWriteable(path): qprint(path)
-            else: result = False
-        if not result: raise OSError('Failed creating host directory')
+            else: isOkay = False
+        if not isOkay: raise OSError('Failed creating host directory')
 
 class TargetConfigurationError(ValueError): pass
 

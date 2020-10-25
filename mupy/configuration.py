@@ -4,67 +4,9 @@ import pathlib
 import semantic_version
 import yaml
 
+from . import mupy
 from . import version
 from .quiet import qprint
-
-_DEFAULT = """
-
-default:
-  target:       cpython
-  app:          demo
-
-directory:
-  lib:          "lib"
-  app:          "app"
-  dev:          "dev"
-  build:        "build"
-  
-libs:
-
-  - name:       logger
-    directory:  "logger"
-
-apps:
-
-  - name:       demo
-    directory:  "demo"
-
-  - name:       demo_log
-    directory:  "demo_log"
-    libs:
-      - logger
-      - bar
-
-targets:
-
-  - name:       cpython
-    type:       docker
-    meta:
-      dockerfile: |
-        FROM python:3.7.9-slim-stretch
-        ENV PYTHONPATH={pythonpath}
-        CMD ["python3"]
-
-  - name:       unix
-    type:       docker
-    meta:
-      dockerfile: |
-        FROM debian:stretch-slim
-        CMD ["echo", "Hello, Unix!"]
-
-  - name:       stm32
-    type:       cross
-    meta:
-
-version:
-  name:         "{name}"
-  version:      "{version}"
-
-""".format(
-    name=version.NAME,
-    version=version.VERSION,
-    pythonpath='/flash/lib'
-)
 
 class ConfigurationError(OSError): pass
 class ConfigurationInstallError(OSError): pass
@@ -84,7 +26,7 @@ class Configuration:
                 qprint(f"Renamed to '{rename}'")
                 mode = 'w'
             with open(path, mode) as file:
-                file.write(_DEFAULT)
+                file.write(mupy.YAML)
         except:
             raise ConfigurationOverwriteError(
                 'Cannot create {0}'.format(path))
@@ -130,6 +72,7 @@ class Configuration:
         self._directory = yamlContent.get('directory', {})
         self._libs = yamlContent.get('libs', [])
         self._apps = yamlContent.get('apps', [])
+        self._files = yamlContent.get('files', [])
         self._targets = yamlContent.get('targets', [])
 
     @property
@@ -152,4 +95,7 @@ class Configuration:
 
     @property
     def targets(self): return self._targets
+
+    @property
+    def files(self): return self._files
         
