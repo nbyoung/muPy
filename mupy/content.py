@@ -1,51 +1,30 @@
+from collections import UserDict
 import io
 import os
 import pathlib
+import shutil
 import stat
 
 import docker as Docker
 
 from .quiet import qprint
 from . import version
-
-class AppConfigurationError(ValueError): pass
-
-class App:
-
-    @classmethod
-    def fromConfiguration(cls, configuration, name=None):
-        def _appC():
-            appName = name or configuration.default.get('app')
-            try:
-                return next(
-                    (appC for appC in configuration.apps if appC.get('name') == appName),
-                    configuration.apps[0]
-                )
-            except IndexError:
-                raise AppConfigurationError('Missing app configuration')
-        appC = _appC()
-        name = appC.get('name', 'app')
-        directory = appC.get('directory', name)
-        libs = appC.get('libs', ())
-        return cls(name, directory, libs)
-
-    def __init__(self, name, directory, libs):
-        self._name = name
-        self._directory = directory
-        self._libs = libs
-
-    @property
-    def name(self): return self._name
-
+    
 class Host:
+
+    LIB         = 'lib'
+    APP         = 'app'
+    DEV         = 'dev'
+    BUILD       = 'build'
+    KIT         = 'kit'
 
     @classmethod
     def fromConfiguration(cls, configuration):
         parent = configuration.path.parent
         def get(name):
-            return parent / getattr(configuration, name, name)
+            return parent / getattr(configuration.directory, name, name)
         return cls(
-            parent, get('lib'), get('app'), get('dev'), get('build')
+            parent, get(Host.LIB), get(Host.APP), get(Host.DEV), get(Host.BUILD)
         )
 
     def __init__(self, parent, lib, app, dev, build):
@@ -55,6 +34,18 @@ class Host:
         self._dev = dev
         self._build = build
 
+    @property
+    def lib(self): return self._lib
+
+    @property
+    def app(self): return self._app
+
+    @property
+    def dev(self): return self._dev
+    
+    def kitPath(self, appName):
+        return pathlib.Path(self._build / Host.KIT / appName)
+    
     def install(self, doForce=False):
 
         def makeWriteable(path):
@@ -91,7 +82,8 @@ class Host:
 
         isOkay = True
         for path in (
-                self._parent, self._lib, self._app, self._dev, self._build
+                self._parent, self._lib, self._app, self._dev,
+                self._build, self._build / Host.KIT
         ):
             if makeWriteable(path): qprint(path)
             else: isOkay = False
@@ -206,4 +198,63 @@ class CrossTarget(Target):
     def install(self):
         qprint(f'{self.name}\n{self.type}')
 
+    
+class Libs(UserDict):
 
+    @classmethod
+    def fromConfiguration(cls, configuration):
+        return cls([(d['name'], d.get('directory', d['name']))
+                    for d in configuration.libs])
+
+class AppConfigurationError(ValueError): pass
+
+class App:
+
+    @classmethod
+    def fromConfiguration(cls, configuration, name=None):
+        def _appC():
+            appName = name or configuration.default.get('app')
+            try:
+                return next(
+                    (appC for appC in configuration.apps if appC.get('name') == appName),
+                    configuration.apps[0]
+                )
+            except IndexError:
+                raise AppConfigurationError('Missing app configuration')
+        appC = _appC()
+        name = appC.get('name', 'app')
+        directory = appC.get('directory', name)
+        libNames = appC.get('libs', ())
+        return cls(name, directory, libNames)
+
+    def __init__(self, name, directory, libNames):
+        self._name = name
+        self._directory = directory
+        self._libNames = libNames
+
+    @property
+    def name(self): return self._name
+
+    def kit(self, host, libs):
+        appPath = host.app / self._directory
+        kitPath = host.kitPath(self._name)
+        shutil.rmtree(kitPath, onerror=lambda type, value, tb: None )
+        shutil.copytree(appPath, kitPath, symlinks=True)
+        qprint(f'{kitPath}')
+        for libName in self._libNames:
+            toPath = kitPath / libName
+            fromPath = host.dev / Host.LIB / libs[libName]
+            if not fromPath.is_dir():
+                fromPath = host.lib / libs[libName]
+            common = os.path.commonprefix((fromPath, toPath))
+            qprint(f'{os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
+            shutil.copytree(fromPath, toPath, symlinks=True)
+        # For each self._lib:
+            # Copy from lib._directory to kitPath / lib
+            # Copy from dev / lib._directory to kitPath / lib
+        return Kit(kitPath)
+
+class Kit:
+
+    def __init__(self, path):
+        self._path = path

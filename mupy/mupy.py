@@ -4,7 +4,7 @@ YAML = """
 
 default:
   target:       cpython
-  app:          example
+  app:          first
 
 directory:
   lib:          "lib"
@@ -14,30 +14,30 @@ directory:
   
 libs:
 
-  - name:       example
-    directory:  "example"
+  - name:       slogan
+    directory:  "message"
 
 apps:
 
-  - name:       example
-    directory:  "example"
+  - name:       first
+    directory:  "hello"
     libs:
-      - example
+      - slogan
 
 files:
 
-  - path:       "app/example/main.py"
+  - path:       "app/hello/main.py"
     content: |
-      from example import message
-      print(f'Hello, {{message}}!')
+      from slogan import MESSAGE
+      print(MESSAGE)
 
-  - path:       "lib/example/__init__.py"
+  - path:       "lib/message/__init__.py"
     content: |
-      message = "world"
+      MESSAGE = "Hello, world!"
 
-  - path:       "dev/lib/example/__init__.py"
+  - path:       "dev/lib/message/__init__.py"
     content: |
-      message = "MuPy"
+      MESSAGE = "MuPy rocks!"
 
 targets:
 

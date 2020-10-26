@@ -114,6 +114,9 @@ class Target(Command):
     version.NAME,
     help='Build and run an application',
     subcommands = {
+        'kit': ({'help': 'Prepare an application to build on the host'}, {
+            '--app': { 'help': 'Select a non-default app', 'type': str },
+        }),
         'run': ({'help': 'Run an application on a target'}, {
             '--app': { 'help': 'Select a non-default app', 'type': str },
             '--target': { 'help': 'Select a non-default target', 'type': str },
@@ -121,6 +124,14 @@ class Target(Command):
     },
 )
 class MuPy(Command):
+
+    def kit(self):
+        host = content.Host.fromConfiguration(self._configuration)
+        app = content.App.fromConfiguration(
+            self._configuration, self._args.app
+        )
+        libs = content.Libs.fromConfiguration(self._configuration)
+        app.kit(host, libs)
 
     def run(self):
         app = content.App.fromConfiguration(
