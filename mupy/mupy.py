@@ -1,16 +1,18 @@
 from . import version
+from .content import Host
 
-YAML = """
-
+PYTHONPATH = '/flash/lib'
+    
+YAML = f"""
 default:
   target:       cpython
   app:          first
 
 directory:
-  lib:          "lib"
-  app:          "app"
-  dev:          "dev"
-  build:        "build"
+  lib:          "{Host.LIB}"
+  app:          "{Host.APP}"
+  dev:          "{Host.DEV}"
+  build:        "{Host.BUILD}"
   
 libs:
 
@@ -23,6 +25,31 @@ apps:
     directory:  "hello"
     libs:
       - slogan
+
+targets:
+
+  - name:       cpython
+    type:       docker
+    meta:
+      dockerfile: |
+        FROM python:3.7.9-slim-stretch
+        ENV PYTHONPATH={PYTHONPATH}
+        CMD ["python3"]
+
+  - name:       unix
+    type:       docker
+    meta:
+      dockerfile: |
+        FROM debian:stretch-slim
+        CMD ["echo", "Hello, Unix!"]
+
+  - name:       stm32
+    type:       cross
+    meta:
+
+version:
+  name:         "{version.NAME}"
+  version:      "{version.VERSION}"
 
 files:
 
@@ -38,34 +65,4 @@ files:
   - path:       "dev/lib/message/__init__.py"
     content: |
       MESSAGE = "MuPy rocks!"
-
-targets:
-
-  - name:       cpython
-    type:       docker
-    meta:
-      dockerfile: |
-        FROM python:3.7.9-slim-stretch
-        ENV PYTHONPATH={pythonpath}
-        CMD ["python3"]
-
-  - name:       unix
-    type:       docker
-    meta:
-      dockerfile: |
-        FROM debian:stretch-slim
-        CMD ["echo", "Hello, Unix!"]
-
-  - name:       stm32
-    type:       cross
-    meta:
-
-version:
-  name:         "{name}"
-  version:      "{version}"
-
-""".format(
-    name=version.NAME,
-    version=version.VERSION,
-    pythonpath='/flash/lib'
-)
+"""
