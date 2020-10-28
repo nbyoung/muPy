@@ -2,6 +2,7 @@ from collections import UserDict
 import io
 import os
 import pathlib
+import py_compile
 import shutil
 import stat
 
@@ -17,6 +18,7 @@ class Host:
     DEV         = 'dev'
     BUILD       = 'build'
     KIT         = 'kit'
+    INSTALL     = 'install'
 
     @classmethod
     def fromConfiguration(cls, configuration):
@@ -45,6 +47,9 @@ class Host:
     
     def kitPath(self, appName):
         return pathlib.Path(self._build / Host.KIT / appName)
+    
+    def installPath(self, targetName, appName):
+        return pathlib.Path(self._build / Host.INSTALL / targetName / appName)
     
     def install(self, doForce=False):
 
@@ -239,22 +244,42 @@ class App:
         appPath = host.app / self._directory
         kitPath = host.kitPath(self._name)
         shutil.rmtree(kitPath, onerror=lambda type, value, tb: None )
+        qprint(f'Kit: {kitPath}')
         shutil.copytree(appPath, kitPath, symlinks=True)
-        qprint(f'{kitPath}')
+        qprint(f'  {appPath}->{kitPath}')
         for libName in self._libNames:
-            toPath = kitPath / libName
             fromPath = host.dev / Host.LIB / libs[libName]
+            toPath = kitPath / libName
             if not fromPath.is_dir():
                 fromPath = host.lib / libs[libName]
             common = os.path.commonprefix((fromPath, toPath))
-            qprint(f'{os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
+            qprint(f'  {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
             shutil.copytree(fromPath, toPath, symlinks=True)
-        # For each self._lib:
-            # Copy from lib._directory to kitPath / lib
-            # Copy from dev / lib._directory to kitPath / lib
-        return Kit(kitPath)
+        return Kit(self._name, kitPath)
 
 class Kit:
 
-    def __init__(self, path):
+    SUFFIX_PY   = '.py'
+    SUFFIX_PYC  = '.pyc'
+
+    def __init__(self, appName, path):
+        self._appName = appName
         self._path = path
+
+    def compile(self, host, target):
+        installPath = host.installPath(target.name, self._appName)
+        shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
+        qprint(f'Compile: {installPath}')
+        for directory, dirNames, fileNames in os.walk(self._path):
+            relative = os.path.relpath(directory, self._path)
+            iPath = installPath / relative
+            iPath.mkdir(parents=True, exist_ok=True)
+            for fileName in [fN for fN in fileNames
+                             if pathlib.Path(fN).suffix == Kit.SUFFIX_PY]:
+                fromPath = pathlib.Path(directory) / fileName
+                toPath = (iPath / fileName).with_suffix(Kit.SUFFIX_PYC)
+                common = os.path.commonprefix((fromPath, toPath))
+                qprint(f'  {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
+                py_compile.compile(fromPath, toPath)
+        
+        

@@ -117,6 +117,10 @@ class Target(Command):
         'kit': ({'help': 'Prepare an application to build on the host'}, {
             '--app': { 'help': 'Select a non-default app', 'type': str },
         }),
+        'compile': ({'help': 'Prepare an application to build on the host'}, {
+            '--app': { 'help': 'Select a non-default app', 'type': str },
+            '--target': { 'help': 'Select a non-default target', 'type': str },
+        }),
         'run': ({'help': 'Run an application on a target'}, {
             '--app': { 'help': 'Select a non-default app', 'type': str },
             '--target': { 'help': 'Select a non-default target', 'type': str },
@@ -125,22 +129,30 @@ class Target(Command):
 )
 class MuPy(Command):
 
-    def kit(self):
-        host = content.Host.fromConfiguration(self._configuration)
-        app = content.App.fromConfiguration(
+    def _getHost(self):
+        return content.Host.fromConfiguration(self._configuration)
+        
+    def _getApp(self):
+        return content.App.fromConfiguration(
             self._configuration, self._args.app
         )
-        libs = content.Libs.fromConfiguration(self._configuration)
-        app.kit(host, libs)
 
-    def run(self):
-        app = content.App.fromConfiguration(
-            self._configuration, self._args.app
-        )
-        target = content.Target.fromConfiguration(
+    def _getLibs(self):
+        return content.Libs.fromConfiguration(self._configuration)
+
+    def _getTarget(self):
+        return content.Target.fromConfiguration(
             self._configuration, self._args.target
         )
-        target.run(app)
+
+    def kit(self):
+        return self._getApp().kit(self._getHost(), self._getLibs())
+
+    def compile(self):
+        return self.kit().compile(self._getHost(), self._getTarget())
+        
+    def run(self):
+        self._getTarget.run(self._getApp())
 
 
 def _main(cls):
