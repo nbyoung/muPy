@@ -72,9 +72,11 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
         'install': ({'help': f"2. Install the files specified in '{_MUPY_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
         }),
-        'show': ({'help': f'3. Display the host setup details'}, {
+        'remove': ({'help': f"3. Remove the Docker images"}, {
         }),
-        'remove': ({'help': f'4. Remove the host setup'}, {
+        'show': ({'help': f'4. Display the host setup details'}, {
+        }),
+        'remove': ({'help': f'5. Remove the host setup'}, {
             '--force': { 'action': 'store_true' },
         }),
     },
@@ -85,19 +87,22 @@ class Host(Command):
         qprint(f"Installing from '{self._configuration.path}'")
         host = content.Host.fromConfiguration(self._configuration)
         host.install(self._args.force)
-        for target in [
-                content.Target.fromConfiguration(
-                    self._configuration, targetConfiguration.get('name')
+        for name in ('cpython', 'micropython'):
+            try:
+                content.Mode.fromConfiguration(self._configuration, name).install()
+            except KeyError:
+                raise ConfigurationMissingError(
+                    f"Missing mode configuration for '{name}'"
                 )
-                for targetConfiguration in self._configuration.targets
-        ]:
-            target.install()
         for fileC in self._configuration.files:
             path = pathlib.Path(fileC['path'])
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, 'w') as file:
                 file.write(fileC['content'])
             qprint(f"Wrote file '{path}'")
+
+    def remove(self):
+        content.DockerMode.removeAllImages()
 
 @command(
     _MUPY_TARGET,
@@ -117,7 +122,11 @@ class Target(Command):
         'kit': ({'help': 'Prepare an application to build on the host'}, {
             '--app': { 'help': 'Select a non-default app', 'type': str },
         }),
-        'compile': ({'help': 'Prepare an application to build on the host'}, {
+        'build': ({'help': 'Prepare an application to install on the target'}, {
+            '--app': { 'help': 'Select a non-default app', 'type': str },
+            '--target': { 'help': 'Select a non-default target', 'type': str },
+        }),
+        'install': ({'help': 'Prepare an application to run on the target'}, {
             '--app': { 'help': 'Select a non-default app', 'type': str },
             '--target': { 'help': 'Select a non-default target', 'type': str },
         }),
@@ -148,11 +157,14 @@ class MuPy(Command):
     def kit(self):
         return self._getApp().kit(self._getHost(), self._getLibs())
 
-    def compile(self):
-        return self.kit().compile(self._getHost(), self._getTarget())
+    def build(self):
+        return self.kit().build(self._getTarget())
         
+    def install(self):
+        self.build().install()
+
     def run(self):
-        self._getTarget.run(self._getApp())
+        self._getTarget().run(self._getApp())
 
 
 def _main(cls):

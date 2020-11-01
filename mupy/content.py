@@ -94,77 +94,76 @@ class Host:
             else: isOkay = False
         if not isOkay: raise OSError('Failed creating host directory')
 
-class TargetConfigurationError(ValueError): pass
+class Mode:
 
-class Target:
+    @classmethod
+    def fromConfiguration(cls, configuration, name):
+        modeConfiguration = configuration.mode[name]
+        return (
+            {
+            'docker': DockerMode,
+            }[modeConfiguration['type']]
+        ).fromMeta(name, modeConfiguration['meta'])
 
-    @staticmethod
-    def fromConfiguration(configuration, name=None):
-        nullC = {'name': 'null', 'type': None}
-        def _targetC():
-            try:
-                targetName = name or configuration.default.get('target')
-                return next(
-                    (targetC for targetC in configuration.targets
-                     if targetC.get('name') == targetName),
-                    nullC if targetName == 'null' else configuration.targets[0]
-                )
-            except IndexError:
-                return nullC
-        targetC = _targetC()
-        type = targetC.get('type')
-        name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
-        meta = targetC.get('meta')
-        try:
-            return {
-                None: NullTarget,
-                'docker': DockerTarget,
-                'cross': CrossTarget,
-            }[type](name, type, meta)
-        except KeyError:
-            raise TargetConfigurationError(f"Unknown target type: '{type}'")
-
-    def __init__(self, name, type):
+    def __init__(self, name):
         self._name = name
-        self._type = type
 
     @property
     def name(self): return self._name
 
+    def run(self):
+        raise NotImplementedError()
+
+class DockerMode(Mode):
+
+    repository = f'{version.NAME}'
+
+    @staticmethod
+    def getTag(name): return f'{DockerMode.repository}:{name}'
+
+    class Container:
+
+        def __init__(self, type, name, args, stopTimeout=1, **kwargs):
+            self._stopTimeout = stopTimeout
+            docker = Docker.from_env()
+            self._container = docker.containers.run(
+                DockerMode.getTag(type),
+                args,
+                detach=True,
+                name=name,
+                network_mode='host',
+                auto_remove=True,
+                stderr=True,
+                stdout=True,
+                **kwargs
+            )
+
+        def __enter__(self):
+            return self._container
+
+        def __exit__(self, exc_type, exc_value, exc_traceback):
+            self._container.stop(timeout=self._stopTimeout)
+            
+
+    @staticmethod
+    def removeAllImages():
+        docker = Docker.from_env()
+        for image in docker.images.list(
+                name=DockerMode.repository
+        ):
+            docker.images.remove(str(image.id), force=True, noprune=False)
+            qprint(f'Removed Docker image {image.tags[0]} {image.short_id.split(":")[1]}')
+
+    @classmethod
+    def fromMeta(cls, name, meta):
+        return cls(name, meta['dockerfile'])
+
     @property
-    def type(self): return self._type
-                 
-    def install(self):
-        raise NotImplementedError
-                 
-    def run(self, app):
-        raise NotImplementedError
+    def tag(self): return DockerMode.getTag(self.name)
 
-class NullTarget(Target):
-
-    def __init__(self, name, type, meta):
-        super().__init__(name, type)
-
-    def install(self):
-        qprint(f"Installed null-type target, '{self.name}'")
-
-    def run(self, app):
-        qprint(f"Run {app} on null-type target, '{self.name}'")
-
-class DockerTarget(Target):
-
-    def __init__(self, name, type, meta):
-        super().__init__(name, type)
-        self._dockerfile = meta['dockerfile']
-
-    @property
-    def dockerfile(self): return self._dockerfile
-    
-    @property
-    def repository(self): return f'{version.NAME}'
-
-    @property
-    def tag(self): return f'{self.repository}:{self.name}'
+    def __init__(self, name, dockerfile):
+        super().__init__(name)
+        self._dockerfile = dockerfile
 
     def install(self):
         docker = Docker.from_env()
@@ -176,6 +175,7 @@ class DockerTarget(Target):
         qprint(f'Installed Docker image {self.tag} {image.short_id.split(":")[1]}')
 
     def run(self, app):
+        return
         docker = Docker.from_env()
         container = docker.containers.run(
             self.tag,
@@ -195,13 +195,67 @@ class DockerTarget(Target):
             qprint(f' Stopping Docker {container.name}')
             container.stop(timeout=1)
 
-class CrossTarget(Target):
+class TargetConfigurationError(ValueError): pass
+
+class Target:
+
+    @staticmethod
+    def fromConfiguration(configuration, name=None):
+        nullC = {'name': 'null', 'mode': None, 'type': None}
+        def _targetC():
+            try:
+                targetName = name or configuration.default.get('target')
+                return next(
+                    (targetC for targetC in configuration.targets
+                     if targetC.get('name') == targetName),
+                    nullC if targetName == 'null' else configuration.targets[0]
+                )
+            except IndexError:
+                return nullC
+        targetC = _targetC()
+        mode = targetC.get('mode', 'cross')
+        type = targetC.get('type', 'micropython')
+        name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
+        meta = targetC.get('meta')
+        try:
+            return {
+                None: NullTarget,
+                'docker': DockerTarget,
+                'cross': CrossTarget,
+            }[mode](name, type, meta)
+        except KeyError:
+            raise TargetConfigurationError(f"Unknown target type: '{type}'")
+
+    def __init__(self, name, type):
+        self._name = name
+        self._type = type
+
+    @property
+    def name(self): return self._name
+
+    @property
+    def type(self): return self._type
+                 
+    def run(self, app):
+        raise NotImplementedError
+
+class NullTarget(Target):
 
     def __init__(self, name, type, meta):
         super().__init__(name, type)
 
-    def install(self):
-        qprint(f'{self.name}\n{self.type}')
+    def run(self, app):
+        qprint(f"Run {app} on null-type target, '{self.name}'")
+
+class DockerTarget(Target):
+
+    def __init__(self, name, type, meta):
+        super().__init__(name, type)
+
+class CrossTarget(Target):
+
+    def __init__(self, name, type, meta):
+        super().__init__(name, type)
 
     
 class Libs(UserDict):
@@ -246,7 +300,7 @@ class App:
         shutil.rmtree(kitPath, onerror=lambda type, value, tb: None )
         qprint(f'Kit: {kitPath}')
         shutil.copytree(appPath, kitPath, symlinks=True)
-        qprint(f'  {appPath}->{kitPath}')
+        qprint(f'k: {appPath}->{kitPath}')
         for libName in self._libNames:
             fromPath = host.dev / Host.LIB / libs[libName]
             toPath = kitPath / libName
@@ -255,21 +309,22 @@ class App:
             common = os.path.commonprefix((fromPath, toPath))
             qprint(f'  {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
             shutil.copytree(fromPath, toPath, symlinks=True)
-        return Kit(self._name, kitPath)
+        return Kit(host, self, kitPath)
 
 class Kit:
 
     SUFFIX_PY   = '.py'
     SUFFIX_PYC  = '.pyc'
 
-    def __init__(self, appName, path):
-        self._appName = appName
+    def __init__(self, host, app, path):
+        self._host = host
+        self._app = app
         self._path = path
 
-    def compile(self, host, target):
-        installPath = host.installPath(target.name, self._appName)
+    def build(self, target):
+        installPath = self._host.installPath(target.name, self._app.name)
         shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
-        qprint(f'Compile: {installPath}')
+        qprint(f'Build: {installPath}')
         for directory, dirNames, fileNames in os.walk(self._path):
             relative = os.path.relpath(directory, self._path)
             iPath = installPath / relative
@@ -279,7 +334,62 @@ class Kit:
                 fromPath = pathlib.Path(directory) / fileName
                 toPath = (iPath / fileName).with_suffix(Kit.SUFFIX_PYC)
                 common = os.path.commonprefix((fromPath, toPath))
-                qprint(f'  {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
-                py_compile.compile(fromPath, toPath)
-        
-        
+                fromRPath = pathlib.Path(os.path.relpath(fromPath, common))
+                toRPath = pathlib.Path(os.path.relpath(toPath, common))
+                args = [ # TODO Also for micropython mpy-cross
+                    'python', '-c',
+                    f'''
+from py_compile import compile
+compile('/{fromRPath}', '/{toRPath}')
+print('b: {fromRPath} -> {toRPath}')
+''',
+                ]
+                volumes={
+                    f'{fromPath.parent}': {'bind': f'/{fromRPath.parent}', 'mode': 'ro'},
+                    f'{toPath.parent}': {'bind': f'/{toRPath.parent}', 'mode': 'rw'},
+                }
+                with DockerMode.Container(
+                        target.type, f'{target.type}-compile', args, volumes=volumes,
+                ) as container:
+                    for output in container.logs(stream=True):
+                        qprint(output.decode('utf-8'), end='')
+        # TODO Move to content.Install.run()
+        workingDir = '/flash'
+        args = ['python', 'main.pyc']
+        volumes = {
+            f'{installPath}': {'bind': workingDir, 'mode': 'ro'},
+        }
+        with DockerMode.Container(
+                target.type, f'{target.type}-run', args, volumes=volumes, working_dir=workingDir
+        ) as container:
+            for output in container.logs(stream=True):
+                qprint(output.decode('utf-8'), end='')
+        #
+        return Build.withDocker(installPath, target)
+
+class Build:
+
+    @classmethod
+    def withDocker(cls, path, target):
+        pass
+        # return cls()
+
+    def __init__(self, path, target):
+        self._path = path
+        self._target = target
+
+    def install(self):
+        raise NotImplementedError()
+
+class Install:
+
+    def __init__(self, build):
+        self._build = build
+
+    def run(self):
+        raise NotImplementedError()
+
+class Runtime:
+
+    def __init__(self, install):
+        self._install = install

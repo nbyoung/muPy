@@ -5,8 +5,8 @@ PYTHONPATH = '/flash/lib'
     
 YAML = f"""
 default:
-  target:       cpython
   app:          first
+  target:       python
 
 directory:
   lib:          "{Host.LIB}"
@@ -28,7 +28,23 @@ apps:
 
 targets:
 
-  - name:       cpython
+  - name:       python
+    mode:       docker
+    type:       cpython
+
+  - name:       unix
+    mode:       docker
+
+  - name:       stm32
+    mode:       cross
+
+version:
+  name:         "{version.NAME}"
+  version:      "{version.VERSION}"
+
+mode:
+
+  cpython:
     type:       docker
     meta:
       dockerfile: |
@@ -36,20 +52,12 @@ targets:
         ENV PYTHONPATH={PYTHONPATH}
         CMD ["python3"]
 
-  - name:       unix
+  micropython:
     type:       docker
     meta:
       dockerfile: |
         FROM debian:stretch-slim
         CMD ["echo", "Hello, Unix!"]
-
-  - name:       stm32
-    type:       cross
-    meta:
-
-version:
-  name:         "{version.NAME}"
-  version:      "{version.VERSION}"
 
 files:
 

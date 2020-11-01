@@ -70,6 +70,7 @@ class Configuration:
         )
         self._default = yamlContent.get('default', {})
         self._directory = yamlContent.get('directory', {})
+        self._mode = yamlContent.get('mode', {})
         self._libs = yamlContent.get('libs', [])
         self._apps = yamlContent.get('apps', [])
         self._files = yamlContent.get('files', [])
@@ -86,6 +87,9 @@ class Configuration:
 
     @property
     def directory(self): return self._directory
+
+    @property
+    def mode(self): return self._mode
 
     @property
     def libs(self): return self._libs
