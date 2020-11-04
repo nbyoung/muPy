@@ -44,12 +44,15 @@ class Host:
 
     @property
     def dev(self): return self._dev
+
+    @property
+    def buildPath(self): return self._build
     
     def kitPath(self, appName):
-        return pathlib.Path(self._build / Host.KIT / appName)
+        return pathlib.Path(self.buildPath / Host.KIT / appName)
     
     def installPath(self, targetName, appName):
-        return pathlib.Path(self._build / Host.INSTALL / targetName / appName)
+        return pathlib.Path(self.buildPath / Host.INSTALL / targetName / appName)
     
     def install(self, doForce=False):
 
@@ -156,17 +159,20 @@ class DockerMode(Mode):
 
     @classmethod
     def fromMeta(cls, name, meta):
-        return cls(name, meta['dockerfile'])
+        return cls(name, meta['dockerfile'], meta.get('message'))
 
     @property
     def tag(self): return DockerMode.getTag(self.name)
 
-    def __init__(self, name, dockerfile):
+    def __init__(self, name, dockerfile, message=None):
         super().__init__(name)
         self._dockerfile = dockerfile
+        self._message = message
 
     def install(self):
         docker = Docker.from_env()
+        if self._message:
+            qprint(f'Installing Docker image {self.tag}; {self._message}...')
         image, _ = docker.images.build(
             fileobj=io.BytesIO(self._dockerfile.encode('utf-8')),
             tag=f'{self.tag}',
@@ -235,11 +241,14 @@ class Target:
 
     @property
     def type(self): return self._type
-                 
-    def run(self, app):
-        raise NotImplementedError
+
+    def buildContainer(self, buildPath, pathPairs):
+        raise NotImplementedError()
+        
 
 class NullTarget(Target):
+
+    SUFFIX = ''
 
     def __init__(self, name, type, meta):
         super().__init__(name, type)
@@ -249,10 +258,19 @@ class NullTarget(Target):
 
 class DockerTarget(Target):
 
+    SUFFIX = '.pyc'
+
     def __init__(self, name, type, meta):
         super().__init__(name, type)
 
+    def buildContainer(self, args, **kwargs):
+        return DockerMode.Container(
+            self.type, f'{self.type}-build', args, **kwargs,
+        )
+
 class CrossTarget(Target):
+
+    SUFFIX = '.mpy'
 
     def __init__(self, name, type, meta):
         super().__init__(name, type)
@@ -307,14 +325,13 @@ class App:
             if not fromPath.is_dir():
                 fromPath = host.lib / libs[libName]
             common = os.path.commonprefix((fromPath, toPath))
-            qprint(f'  {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
+            qprint(f'k: {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
             shutil.copytree(fromPath, toPath, symlinks=True)
         return Kit(host, self, kitPath)
 
 class Kit:
 
-    SUFFIX_PY   = '.py'
-    SUFFIX_PYC  = '.pyc'
+    SUFFIX = '.py'
 
     def __init__(self, host, app, path):
         self._host = host
@@ -322,45 +339,53 @@ class Kit:
         self._path = path
 
     def build(self, target):
+        buildPath = self._host.buildPath
         installPath = self._host.installPath(target.name, self._app.name)
         shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
         qprint(f'Build: {installPath}')
+        pathPairs = []
         for directory, dirNames, fileNames in os.walk(self._path):
-            relative = os.path.relpath(directory, self._path)
-            iPath = installPath / relative
+            iPath = installPath / os.path.relpath(directory, self._path)
             iPath.mkdir(parents=True, exist_ok=True)
             for fileName in [fN for fN in fileNames
-                             if pathlib.Path(fN).suffix == Kit.SUFFIX_PY]:
-                fromPath = pathlib.Path(directory) / fileName
-                toPath = (iPath / fileName).with_suffix(Kit.SUFFIX_PYC)
-                common = os.path.commonprefix((fromPath, toPath))
-                fromRPath = pathlib.Path(os.path.relpath(fromPath, common))
-                toRPath = pathlib.Path(os.path.relpath(toPath, common))
-                args = [ # TODO Also for micropython mpy-cross
-                    'python', '-c',
-                    f'''
+                             if pathlib.Path(fN).suffix == Kit.SUFFIX]:
+                pathPairs.append((
+                    os.path.relpath(
+                        pathlib.Path(directory) / fileName, buildPath),
+                    os.path.relpath(
+                        (iPath / fileName).with_suffix(target.SUFFIX), buildPath))
+                )
+        moduleName = 'build'
+        with open(buildPath / '__init__.py', 'w') as moduleFile:
+            moduleFile.write(f'pairs = {pathPairs}')
+        args = [ # TODO Also for micropython mpy-cross
+            'python', '-c',
+            f'''
+import pathlib
 from py_compile import compile
-compile('/{fromRPath}', '/{toRPath}')
-print('b: {fromRPath} -> {toRPath}')
+from {moduleName} import pairs
+path = pathlib.Path('{moduleName}')
+for pair in pairs:
+    compile(path / pair[0], path / pair[1])
+    print('%s -> %s' % pair)
 ''',
-                ]
-                volumes={
-                    f'{fromPath.parent}': {'bind': f'/{fromRPath.parent}', 'mode': 'ro'},
-                    f'{toPath.parent}': {'bind': f'/{toRPath.parent}', 'mode': 'rw'},
-                }
-                with DockerMode.Container(
-                        target.type, f'{target.type}-compile', args, volumes=volumes,
-                ) as container:
-                    for output in container.logs(stream=True):
-                        qprint(output.decode('utf-8'), end='')
+        ]
+        kwargs = {
+            'volumes': {
+                f'{buildPath}': {'bind': '/' + moduleName, 'mode': 'rw'},
+            },
+        }
+        with target.buildContainer(args, **kwargs) as container:
+            for output in container.logs(stream=True):
+                qprint('b: %s' % output.decode('utf-8'), end='')
         # TODO Move to content.Install.run()
-        workingDir = '/flash'
+        containerPath = '/flash'
         args = ['python', 'main.pyc']
         volumes = {
-            f'{installPath}': {'bind': workingDir, 'mode': 'ro'},
+            f'{installPath}': {'bind': containerPath, 'mode': 'ro'},
         }
         with DockerMode.Container(
-                target.type, f'{target.type}-run', args, volumes=volumes, working_dir=workingDir
+                target.type, f'{target.type}-run', args, volumes=volumes, working_dir=containerPath
         ) as container:
             for output in container.logs(stream=True):
                 qprint(output.decode('utf-8'), end='')
