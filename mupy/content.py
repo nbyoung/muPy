@@ -207,7 +207,9 @@ class Target:
 
     @staticmethod
     def fromConfiguration(configuration, name=None):
-        nullC = {'name': 'null', 'mode': None, 'type': None}
+        nullC = {
+            'name': 'null', 'mode': None, 'type': None, 'precompile': False
+        }
         def _targetC():
             try:
                 targetName = name or configuration.default.get('target')
@@ -221,6 +223,7 @@ class Target:
         targetC = _targetC()
         mode = targetC.get('mode', 'cross')
         type = targetC.get('type', 'micropython')
+        precompile = targetC.get('precompile', True)
         name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
         meta = targetC.get('meta')
         try:
@@ -228,13 +231,14 @@ class Target:
                 None: NullTarget,
                 'docker': DockerTarget,
                 'cross': CrossTarget,
-            }[mode](name, type, meta)
+            }[mode](name, type, precompile, meta)
         except KeyError:
             raise TargetConfigurationError(f"Unknown target type: '{type}'")
 
-    def __init__(self, name, type):
+    def __init__(self, name, type, precompile):
         self._name = name
         self._type = type
+        self._precompile = precompile
 
     @property
     def name(self): return self._name
@@ -243,7 +247,13 @@ class Target:
     def type(self): return self._type
 
     @property
-    def suffix(self): return '.pyc' if self._type == 'cpython' else '.mpy'
+    def precompile(self): return self._precompile
+
+    @property
+    def suffix(self): return (
+            ('.pyc' if self._type == 'cpython' else '.mpy') if self._precompile
+            else '.py'
+    )
 
     def buildContainer(self, buildPath, sourceFromTo):
         raise NotImplementedError()
@@ -254,28 +264,31 @@ class NullTarget(Target):
     @property
     def suffix(self): return ''
 
-    def __init__(self, name, type, meta):
-        super().__init__(name, type)
+    def __init__(self, name, type, precompile, meta):
+        super().__init__(name, type, precompile)
 
     def run(self, app):
         qprint(f"Run {app} on null-type target, '{self.name}'")
 
 class CrossTarget(Target):
 
-    def __init__(self, name, type, meta=None):
-        super().__init__(name, type)
+    def __init__(self, name, type, precompile, meta=None):
+        super().__init__(name, type, precompile)
 
     def buildContainer(self, buildPath, sourceFromTo):
         baseName = os.path.basename(buildPath)
         containerPath = pathlib.Path('/' + baseName)
         script = 'compile'
         with open(buildPath / script, 'w') as scriptFile:
-            for sourcePath, fromPath, toPath in sourceFromTo:
+            cP = containerPath
+            for sP, fP, tP in sourceFromTo:
                 scriptFile.write(
-                    f'cp {containerPath / fromPath} {(containerPath / toPath).parent}\n'
-                    f'mpy-cross -s {sourcePath} -o {containerPath / toPath} {containerPath / fromPath}\n'
+                    f'mpy-cross -s {sP} -o {cP / tP} {cP / fP}\n'
+                    if self._precompile
+                    else
+                    f'cp {cP / fP} {(cP / tP).parent}\n'
                 )
-                scriptFile.write(f'echo {fromPath} {toPath}\n')
+                scriptFile.write(f'echo {fP} {tP}\n')
         args = ('cat', script)
         args = ('bash', script)
         kwargs = {
@@ -290,23 +303,27 @@ class CrossTarget(Target):
 
 class DockerTarget(CrossTarget):
 
-    def __init__(self, name, type, meta):
-        super().__init__(name, type)
+    def __init__(self, name, type, precompile, meta):
+        super().__init__(name, type, precompile)
 
     def buildContainer(self, buildPath, sourceFromTo):
         if self.type == 'cpython':
             moduleName = os.path.basename(buildPath)
             with open(buildPath / '__init__.py', 'w') as moduleFile:
                 moduleFile.write(f'sourceFromTo = {sourceFromTo}')
+            operation = (
+                'from py_compile import compile' if self._precompile
+                else 'from shutil import copy'
+            )
             args = [
                 'python', '-c',
                 f'''
 import pathlib
-from py_compile import compile
+{operation} as operation
 from {moduleName} import sourceFromTo
 path = pathlib.Path('{moduleName}')
 for _, fromPath, toPath in sourceFromTo:
-    compile(path / fromPath, path / toPath)
+    operation(path / fromPath, path / toPath)
     print('%s -> %s' % (fromPath, toPath))
 ''',
             ]

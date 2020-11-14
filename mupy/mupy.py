@@ -34,6 +34,7 @@ targets:
 
   - name:       unix
     mode:       docker
+    precompile: false
 
   - name:       stm32
     mode:       cross
