@@ -38,6 +38,9 @@ targets:
 
   - name:       stm32
     mode:       cross
+    meta:
+      baud:     115200
+      port:     "/dev/ttyACM0"
 
 version:
   name:         "{version.NAME}"

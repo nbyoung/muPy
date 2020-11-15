@@ -5,10 +5,15 @@ import pathlib
 import py_compile
 import shutil
 import stat
+import subprocess
+import sys
 
 import docker as Docker
 
+from .quiet import isQuiet
+
 from .quiet import qprint
+
 from . import version
     
 class Host:
@@ -104,7 +109,7 @@ class Mode:
         modeConfiguration = configuration.mode[name]
         return (
             {
-            'docker': DockerMode,
+                'docker': DockerMode,
             }[modeConfiguration['type']]
         ).fromMeta(name, modeConfiguration['meta'])
 
@@ -113,9 +118,6 @@ class Mode:
 
     @property
     def name(self): return self._name
-
-    def run(self):
-        raise NotImplementedError()
 
 class DockerMode(Mode):
 
@@ -208,24 +210,28 @@ class Target:
     @staticmethod
     def fromConfiguration(configuration, name=None):
         nullC = {
-            'name': 'null', 'mode': None, 'type': None, 'precompile': False
+            'name': '_null_', 'mode': None, 'type': None, 'precompile': False
         }
         def _targetC():
+            if name == "": return nullC
             try:
                 targetName = name or configuration.default.get('target')
                 return next(
                     (targetC for targetC in configuration.targets
-                     if targetC.get('name') == targetName),
-                    nullC if targetName == 'null' else configuration.targets[0]
+                     if targetC.get('name') == targetName)
                 )
             except IndexError:
                 return nullC
+            except StopIteration:
+                raise TargetConfigurationError(
+                    f"Missing configuration for target '{name}'"
+                )
         targetC = _targetC()
         mode = targetC.get('mode', 'cross')
         type = targetC.get('type', 'micropython')
         precompile = targetC.get('precompile', True)
         name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
-        meta = targetC.get('meta')
+        meta = targetC.get('meta', {})
         try:
             return {
                 None: NullTarget,
@@ -257,9 +263,29 @@ class Target:
 
     def buildContainer(self, buildPath, sourceFromTo):
         raise NotImplementedError()
+
+    def install(self, build):
+        raise NotImplementedError()
+
+    def run(self, install):
+        qprint(
+            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
+        )
         
 
 class NullTarget(Target):
+
+    class PseudoContainer:
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, exc_traceback):
+            pass
+
+        def logs(self, *args, **kwargs):
+            return ()
+
 
     @property
     def suffix(self): return ''
@@ -267,13 +293,34 @@ class NullTarget(Target):
     def __init__(self, name, type, precompile, meta):
         super().__init__(name, type, precompile)
 
-    def run(self, app):
-        qprint(f"Run {app} on null-type target, '{self.name}'")
+    def buildContainer(self, buildPath, sourceFromTo):
+        return NullTarget.PseudoContainer()
+
+    def install(self, build):
+        pass
+
+    def run(self, install):
+        super().run(install)
 
 class CrossTarget(Target):
 
-    def __init__(self, name, type, precompile, meta=None):
+    _RSHELL = 'rshell'
+
+    @staticmethod
+    def isInstalled(onError):
+        try:
+            subprocess.run((CrossTarget._RSHELL, '--version'))
+        except FileNotFoundError:
+            onError(
+                '>>> %s <<<' %
+                f"Missing {CrossTarget._RSHELL} for Micropython."
+                " Please install"
+            )
+
+    def __init__(self, name, type, precompile, meta={}):
         super().__init__(name, type, precompile)
+        self._baud = meta.get('baud', 115200)
+        self._port = meta.get('port', '/dev/ttyACM0')
 
     def buildContainer(self, buildPath, sourceFromTo):
         baseName = os.path.basename(buildPath)
@@ -299,7 +346,24 @@ class CrossTarget(Target):
         }
         return DockerMode.Container(
             self.type, f'{self.type}-build', args, **kwargs,
-        ) 
+        )
+
+    def _rshellCommand(self, command):
+        subprocess.run(
+            (
+                CrossTarget._RSHELL,
+                '--baud', str(self._baud), '--port', self._port,
+                command,
+            ),
+            check=True
+        )
+
+    def install(self, build):
+        self._rshellCommand(f'rsync {build.path} /flash')
+
+    def run(self, install):
+        super().run(install)
+        self._rshellCommand('repl ~ import main ~')
 
 class DockerTarget(CrossTarget):
 
@@ -337,6 +401,29 @@ for _, fromPath, toPath in sourceFromTo:
             ) 
         else:
             return super().buildContainer(buildPath, sourceFromTo)
+
+    def install(self, build):
+        pass
+
+    def run(self, install):
+        super().run(install)
+        containerPath = '/flash'
+        args = (
+            ['python', 'main.pyc'] if self._type == 'cpython'
+            else ['micropython', '-m', 'main']
+        )
+        volumes = {
+            f'{install.build.path}': {'bind': containerPath, 'mode': 'rw'},
+        }
+        with DockerMode.Container(
+                self._type,
+                f'{self._type}-run',
+                args,
+                volumes=volumes,
+                working_dir=containerPath,
+        ) as container:
+            for output in container.logs(stream=True):
+                qprint(output.decode('utf-8'), end='')
 
     
 class Libs(UserDict):
@@ -401,6 +488,15 @@ class Kit:
         self._app = app
         self._path = path
 
+    @property
+    def host(self): return self._host
+
+    @property
+    def app(self): return self._app
+
+    @property
+    def path(self): return self._path
+
     def build(self, target):
         buildPath = self._host.buildPath
         installPath = self._host.installPath(target.name, self._app.name)
@@ -423,41 +519,45 @@ class Kit:
         with target.buildContainer(buildPath, sourceFromTo) as container:
             for output in container.logs(stream=True):
                 qprint('b: %s' % output.decode('utf-8'), end='')
-        # TODO Move to content.Install.run()
-        containerPath = '/flash'
-        args = (
-            ['python', 'main.pyc'] if target.type == 'cpython'
-            else ['micropython', '-m', 'main']
-        )
-        volumes = {
-            f'{installPath}': {'bind': containerPath, 'mode': 'ro'},
-        }
-        with DockerMode.Container(
-                target.type, f'{target.type}-run', args, volumes=volumes, working_dir=containerPath
-        ) as container:
-            for output in container.logs(stream=True):
-                qprint(output.decode('utf-8'), end='')
-        #
-        return Build(installPath, target)
+        return Build(self, installPath, target)
 
 class Build:
 
-    def __init__(self, path, target):
+    def __init__(self, kit, path, target):
+        self._kit = kit
         self._path = path
         self._target = target
 
+    @property
+    def kit(self): return self._kit
+
+    @property
+    def path(self): return self._path
+
+    @property
+    def target(self): return self._target
+
     def install(self):
-        raise NotImplementedError()
+        qprint(f'Install: {self._path} to {self._target.name}')
+        self._target.install(self)
+        return Install(self)
 
 class Install:
 
     def __init__(self, build):
         self._build = build
 
+    @property
+    def build(self): return self._build
+
     def run(self):
-        raise NotImplementedError()
+        self._build.target.run(self)
+        return Runtime(self)
 
 class Runtime:
 
     def __init__(self, install):
         self._install = install
+
+    @property
+    def install(self): return self._install

@@ -84,6 +84,7 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 class Host(Command):
 
     def install(self):
+        content.CrossTarget.isInstalled(lambda m: print(m, file=sys.stderr))
         qprint(f"Installing from '{self._configuration.path}'")
         host = content.Host.fromConfiguration(self._configuration)
         host.install(self._args.force)
@@ -161,10 +162,10 @@ class MuPy(Command):
         return self.kit().build(self._getTarget())
         
     def install(self):
-        self.build().install()
+        return self.build().install()
 
     def run(self):
-        self._getTarget().run(self._getApp())
+        return self.install().run()
 
 
 def _main(cls):
