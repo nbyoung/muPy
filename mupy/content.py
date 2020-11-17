@@ -54,11 +54,11 @@ class Host:
     def buildPath(self): return self._build
     
     def kitPath(self, appName):
-        return pathlib.Path(self.buildPath / Host.KIT / appName)
+        return pathlib.Path(self._build / Host.KIT / appName)
     
     def installPath(self, targetName, appName):
-        return pathlib.Path(self.buildPath / Host.INSTALL / targetName / appName)
-    
+        return pathlib.Path(self._build / Host.INSTALL / targetName / appName)
+
     def install(self, doForce=False):
 
         def makeWriteable(path):
@@ -333,7 +333,7 @@ class CrossTarget(Target):
                     f'mpy-cross -s {sP} -o {cP / tP} {cP / fP}\n'
                     if self._precompile
                     else
-                    f'cp {cP / fP} {(cP / tP).parent}\n'
+                    f'cp --preserve=all {cP / fP} {(cP / tP).parent}\n'
                 )
                 scriptFile.write(f'echo {fP} {tP}\n')
         args = ('cat', script)
@@ -467,7 +467,9 @@ class App:
         kitPath = host.kitPath(self._name)
         shutil.rmtree(kitPath, onerror=lambda type, value, tb: None )
         qprint(f'Kit: {kitPath}')
-        shutil.copytree(appPath, kitPath, symlinks=True)
+        shutil.copytree(
+            appPath, kitPath, symlinks=True, copy_function=shutil.copy2
+        )
         qprint(f'k: {appPath}->{kitPath}')
         for libName in self._libNames:
             fromPath = host.dev / Host.LIB / libs[libName]
@@ -476,7 +478,9 @@ class App:
                 fromPath = host.lib / libs[libName]
             common = os.path.commonprefix((fromPath, toPath))
             qprint(f'k: {os.path.relpath(fromPath, common)} -> {os.path.relpath(toPath, common)}')
-            shutil.copytree(fromPath, toPath, symlinks=True)
+            shutil.copytree(
+                fromPath, toPath, symlinks=True, copy_function=shutil.copy2
+            )
         return Kit(host, self, kitPath)
 
 class Kit:
@@ -514,8 +518,8 @@ class Kit:
                     os.path.relpath(
                         pathlib.Path(directory) / fileName, buildPath),
                     os.path.relpath(
-                        (iPath / fileName).with_suffix(target.suffix), buildPath))
-                )
+                        (iPath / fileName).with_suffix(target.suffix), buildPath)
+                    ))
         with target.buildContainer(buildPath, sourceFromTo) as container:
             for output in container.logs(stream=True):
                 qprint('b: %s' % output.decode('utf-8'), end='')
