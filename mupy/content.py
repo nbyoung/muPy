@@ -198,7 +198,7 @@ class DockerMode(Mode):
         qprint(f"Running '{app.name}' on target '{self.name}' in Docker {container.name}")
         try:
             for output in container.logs(stream=True):
-                qprint(output.decode('utf-8'), end='')
+                print(output.decode('utf-8'), end='')
         except KeyboardInterrupt:
             qprint(f' Stopping Docker {container.name}')
             container.stop(timeout=1)
@@ -295,8 +295,8 @@ class NullTarget(Target):
         pass
 
     def run(self, install):
-        qprint(
-            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
+        print(
+            f"Ran app '{install.build.kit.app.name}' on target '{self.name}'"
         )
 
 class CrossTarget(Target):
@@ -424,7 +424,7 @@ for _, fromPath, toPath in sourceFromTo:
                 working_dir=containerPath,
         ) as container:
             for output in container.logs(stream=True):
-                qprint(output.decode('utf-8'), end='')
+                print(output.decode('utf-8'), end='')
 
     
 class Libs(UserDict):
