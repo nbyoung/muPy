@@ -266,11 +266,6 @@ class Target:
 
     def install(self, build):
         raise NotImplementedError()
-
-    def run(self, install):
-        qprint(
-            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
-        )
         
 
 class NullTarget(Target):
@@ -300,7 +295,9 @@ class NullTarget(Target):
         pass
 
     def run(self, install):
-        super().run(install)
+        qprint(
+            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
+        )
 
 class CrossTarget(Target):
 
@@ -362,7 +359,9 @@ class CrossTarget(Target):
         self._rshellCommand(f'rsync {build.path} /flash')
 
     def run(self, install):
-        super().run(install)
+        qprint(
+            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
+        )
         self._rshellCommand('repl ~ import main ~')
 
 class DockerTarget(CrossTarget):
@@ -406,7 +405,9 @@ for _, fromPath, toPath in sourceFromTo:
         pass
 
     def run(self, install):
-        super().run(install)
+        qprint(
+            f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
+        )
         containerPath = '/flash'
         args = (
             ['python', 'main.pyc'] if self._type == 'cpython'
@@ -504,25 +505,42 @@ class Kit:
     def build(self, target):
         buildPath = self._host.buildPath
         installPath = self._host.installPath(target.name, self._app.name)
-        shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
+        cachePath = self._host.installPath(target.name, '.' + self._app.name)
+        if installPath.is_dir():
+            shutil.rmtree(cachePath, onerror=lambda type, value, tb: None )
+            installPath.rename(cachePath)
+        else:
+            shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
         qprint(f'Build: {installPath}')
         sourceFromTo = []
         for directory, dirNames, fileNames in os.walk(self._path):
+            directory = pathlib.Path(directory)
+            cPath = cachePath / os.path.relpath(directory, self._path)
             iPath = installPath / os.path.relpath(directory, self._path)
             iPath.mkdir(parents=True, exist_ok=True)
-            for fileName in [fN for fN in fileNames
+            for filePath in [pathlib.Path(fN) for fN in fileNames
                              if pathlib.Path(fN).suffix == Kit.SUFFIX]:
-                sourceFromTo.append((
-                    os.path.relpath(
-                        pathlib.Path(directory) / fileName, self._path),
-                    os.path.relpath(
-                        pathlib.Path(directory) / fileName, buildPath),
-                    os.path.relpath(
-                        (iPath / fileName).with_suffix(target.suffix), buildPath)
+                targetFilePath = filePath.with_suffix(target.suffix)
+                if (
+                        (cPath / targetFilePath).exists()
+                        and
+                        os.path.getmtime(cPath / targetFilePath)
+                        >= os.path.getmtime(directory / filePath)
+                ):
+                    shutil.copy2(cPath / targetFilePath, iPath / targetFilePath)
+                else:
+                    sourceFromTo.append((
+                        os.path.relpath(
+                            directory / filePath, self._path),
+                        os.path.relpath(
+                            directory / filePath, buildPath),
+                        os.path.relpath(
+                            (iPath / targetFilePath), buildPath)
                     ))
-        with target.buildContainer(buildPath, sourceFromTo) as container:
-            for output in container.logs(stream=True):
-                qprint('b: %s' % output.decode('utf-8'), end='')
+        if sourceFromTo:
+            with target.buildContainer(buildPath, sourceFromTo) as container:
+                for output in container.logs(stream=True):
+                    qprint('b: %s' % output.decode('utf-8'), end='')
         return Build(self, installPath, target)
 
 class Build:
