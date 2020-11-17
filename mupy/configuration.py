@@ -1,6 +1,7 @@
 from collections import namedtuple, OrderedDict
 import pathlib
 
+import re
 import semantic_version
 import yaml
 
@@ -13,6 +14,16 @@ class ConfigurationInstallError(OSError): pass
 class ConfigurationMissingError(ValueError): pass
 class ConfigurationOverwriteError(OSError): pass
 class ConfigurationSyntaxError(ValueError): pass
+class ConfigurationIdentifierError(ValueError):
+    @classmethod
+    def check(cls, identifier):
+        if not re.fullmatch('[_a-zA-Z][_a-zA-Z0-9]*', identifier):
+            raise cls(f"Invalid identifier '{identifier}'")
+    @classmethod
+    def checkItems(cls, dictionary, keys=()):
+        for key in keys:
+            if key in dictionary:
+                cls.check(dictionary.get(key))
     
 class Configuration:
 
@@ -69,12 +80,23 @@ class Configuration:
             'version', { 'name': version.NAME, 'version': version.VERSION }
         )
         self._default = yamlContent.get('default', {})
+        ConfigurationIdentifierError.checkItems(
+            self._default, ('app', 'target', ))
         self._directory = yamlContent.get('directory', {})
+        ConfigurationIdentifierError.checkItems(
+            self._directory, ('lib', 'app', 'dev', 'build', ))
         self._mode = yamlContent.get('mode', {})
         self._libs = yamlContent.get('libs', [])
+        for lib in self._libs:
+            ConfigurationIdentifierError.checkItems( lib, ('name', ))
         self._apps = yamlContent.get('apps', [])
+        for app in self._apps:
+            ConfigurationIdentifierError.checkItems(app, ('name', ))
         self._files = yamlContent.get('files', [])
         self._targets = yamlContent.get('targets', [])
+        for target in self._targets:
+            ConfigurationIdentifierError.checkItems(
+                target, ('name', 'mode', 'type', ))
 
     @property
     def path(self): return self._path
