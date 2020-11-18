@@ -115,36 +115,52 @@ class Host(Command):
 class Target(Command):
     pass
 
+_ARG = {
+    'arg': {
+        'help': 'Select a non-default app',
+        'type': str, 'nargs': '?', 'default': '@'
+    },
+}
 
 @command(
     version.NAME,
     help='Build and run an application',
     subcommands = {
-        'kit': ({'help': 'Prepare an application to build on the host'}, {
-            '--app': { 'help': 'Select a non-default app', 'type': str },
-        }),
-        'build': ({'help': 'Prepare an application to install on the target'}, {
-            '--app': { 'help': 'Select a non-default app', 'type': str },
-            '--target': { 'help': 'Select a non-default target', 'type': str },
-        }),
-        'install': ({'help': 'Prepare an application to run on the target'}, {
-            '--app': { 'help': 'Select a non-default app', 'type': str },
-            '--target': { 'help': 'Select a non-default target', 'type': str },
-        }),
-        'run': ({'help': 'Run an application on a target'}, {
-            '--app': { 'help': 'Select a non-default app', 'type': str },
-            '--target': { 'help': 'Select a non-default target', 'type': str },
-        }),
+        'kit': ({'help': 'Prepare an application to build'}, _ARG),
+        'build': ({'help': 'Prepare to install app@target'}, _ARG),
+        'install': ({'help': 'Prepare to run app@target'}, _ARG),
+        'run': ({'help': 'Run app@target'}, _ARG),
     },
 )
 class MuPy(Command):
+
+    class Arg:
+
+        @classmethod
+        def fromString(cls, string):
+            string = string.strip()
+            string = string if '@' in string else string + '@'
+            app, target = string.split('@')
+            return cls(app or None, target or None)
+
+        def __init__(self, app, target):
+            self._app = app
+            self._target = target
+
+        def __repr__(self): return f'{self._app or ""}@{self._target or ""}'
+
+        @property
+        def app(self): return self._app
+
+        @property
+        def target(self): return self._target
 
     def _getHost(self):
         return content.Host.fromConfiguration(self._configuration)
         
     def _getApp(self):
         return content.App.fromConfiguration(
-            self._configuration, self._args.app
+            self._configuration, MuPy.Arg.fromString(self._args.arg).app
         )
 
     def _getLibs(self):
@@ -152,7 +168,7 @@ class MuPy(Command):
 
     def _getTarget(self):
         return content.Target.fromConfiguration(
-            self._configuration, self._args.target
+            self._configuration, MuPy.Arg.fromString(self._args.arg).target
         )
 
     def kit(self):

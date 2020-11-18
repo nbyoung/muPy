@@ -215,7 +215,9 @@ class Target:
         def _targetC():
             if name == "": return nullC
             try:
-                targetName = name or configuration.default.get('target')
+                targetName = (
+                    configuration.default.get('target') if name==None else name
+                )
                 return next(
                     (targetC for targetC in configuration.targets
                      if targetC.get('name') == targetName)
@@ -441,14 +443,16 @@ class App:
     @classmethod
     def fromConfiguration(cls, configuration, name=None):
         def _appC():
-            appName = name or configuration.default.get('app')
+            appName = configuration.default.get('app') if name==None else name
             try:
                 return next(
-                    (appC for appC in configuration.apps if appC.get('name') == appName),
-                    configuration.apps[0]
+                    (appC for appC in configuration.apps
+                     if appC.get('name') == appName),
                 )
-            except IndexError:
-                raise AppConfigurationError('Missing app configuration')
+            except StopIteration:
+                raise AppConfigurationError(
+                    f"Missing app configuration '{appName}'"
+                )
         appC = _appC()
         name = appC.get('name', 'app')
         directory = appC.get('directory', name)
