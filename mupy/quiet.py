@@ -13,7 +13,19 @@
 ####            https://mit-license.org/
 ####
 
-isQuiet = False
+class Quiet:
 
-def qprint(*args, **kwargs):
-    if not isQuiet: print(*args, **kwargs)
+    _isQuiet = False
+
+    @classmethod
+    def set(cls, isQuiet=True):
+        cls._isQuiet = bool(isQuiet)
+        return cls.get()
+
+    @classmethod
+    def get(cls):
+        return cls._isQuiet
+
+    @classmethod
+    def qprint(cls, *args, **kwargs):
+        if not cls._isQuiet: print(*args, **kwargs)

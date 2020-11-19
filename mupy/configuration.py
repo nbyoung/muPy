@@ -7,7 +7,7 @@ import yaml
 
 from . import mupy
 from . import version
-from .quiet import qprint
+from .quiet import Quiet; qprint = Quiet.qprint
 
 class ConfigurationError(OSError): pass
 class ConfigurationInstallError(OSError): pass

@@ -10,9 +10,7 @@ import sys
 
 import docker as Docker
 
-from .quiet import isQuiet
-
-from .quiet import qprint
+from .quiet import Quiet; qprint = Quiet.qprint
 
 from . import version
     
@@ -347,24 +345,26 @@ class CrossTarget(Target):
             self.type, f'{self.type}-build', args, **kwargs,
         )
 
-    def _rshellCommand(self, command):
+    def _rshellCommand(self, command, isQuiet=False):
         subprocess.run(
             (
                 CrossTarget._RSHELL,
                 '--baud', str(self._baud), '--port', self._port,
                 command,
             ),
-            check=True
+            check=True,
+            stdout=subprocess.DEVNULL if isQuiet else None,
+            stderr=subprocess.STDOUT,
         )
 
     def install(self, build):
-        self._rshellCommand(f'rsync {build.path} /flash')
+        self._rshellCommand(f'rsync {build.path} /flash', isQuiet=Quiet.get())
 
     def run(self, install):
         qprint(
             f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
         )
-        self._rshellCommand('repl ~ import main ~')
+        self._rshellCommand('repl ~ import main ~', isQuiet=Quiet.get())
 
 class DockerTarget(CrossTarget):
 

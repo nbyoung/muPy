@@ -30,7 +30,7 @@ from .configuration import (
     ConfigurationSyntaxError,
     )
 from . import content
-from .quiet import isQuiet, qprint
+from .quiet import Quiet; qprint = Quiet.qprint
 from . import version
 
 _MUPY = version.NAME
@@ -218,7 +218,7 @@ def _main(cls):
         for suboption, subarguments in suboptions.items():
             subparser.add_argument(suboption, **subarguments)
     args = parser.parse_args()
-    quiet.isQuiet = bool(args.quiet)
+    Quiet.set(bool(args.quiet))
     if args.subcommand:
         filename = pathlib.Path(args.configuration).name
         try:
