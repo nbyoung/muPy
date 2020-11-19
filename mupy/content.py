@@ -405,7 +405,7 @@ for _, fromPath, toPath in sourceFromTo:
                 working_dir=containerPath,
         ) as container:
             for output in container.logs(stream=True):
-                print(output.decode('utf-8'), end='')
+                qprint(output.decode('utf-8'), end='')
 
     
 class Libs(UserDict):
