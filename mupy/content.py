@@ -339,11 +339,11 @@ class CrossTarget(Target):
     def install(self, build):
         self._rshellCommand(f'rsync {build.path} /flash', isQuiet=Quiet.get())
 
-    def run(self, install):
+    def run(self, install, isSilent=False):
         qprint(
             f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
         )
-        self._rshellCommand('repl ~ import main ~', isQuiet=Quiet.get())
+        self._rshellCommand('repl ~ import main ~', isQuiet=isSilent)
 
 class DockerTarget(CrossTarget):
 
@@ -385,7 +385,7 @@ for _, fromPath, toPath in sourceFromTo:
     def install(self, build):
         pass
 
-    def run(self, install):
+    def run(self, install, isSilent=False):
         qprint(
             f"Run app '{install.build.kit.app.name}' on target '{self.name}'"
         )
@@ -405,7 +405,7 @@ for _, fromPath, toPath in sourceFromTo:
                 working_dir=containerPath,
         ) as container:
             for output in container.logs(stream=True):
-                qprint(output.decode('utf-8'), end='')
+                if not isSilent: print(output.decode('utf-8'), end='')
 
     
 class Libs(UserDict):
@@ -555,8 +555,8 @@ class Install:
     @property
     def build(self): return self._build
 
-    def run(self):
-        self._build.target.run(self)
+    def run(self, isSilent=False):
+        self._build.target.run(self, isSilent=isSilent)
         return Runtime(self)
 
 class Runtime:

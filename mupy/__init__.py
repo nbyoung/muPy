@@ -84,7 +84,7 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 class Host(Command):
 
     def install(self):
-        content.CrossTarget.isInstalled(lambda m: print(m, file=sys.stderr))
+        content.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
         qprint(f"Installing from '{self._configuration.path}'")
         host = content.Host.fromConfiguration(self._configuration)
         host.install(self._args.force)
@@ -115,21 +115,31 @@ class Host(Command):
 class Target(Command):
     pass
 
-_ARG = {
-    'arg': {
-        'help': 'Select a non-default app',
-        'type': str, 'nargs': '?', 'default': '@'
-    },
-}
+def _mupyOptions(options={}):
+    args = {
+        'app[@target]': {
+            'help': 'Select a non-default app and/or target',
+            'type': str, 'nargs': '?', 'default': '@',
+        },
+    }
+    args.update(options)
+    return args
 
 @command(
     version.NAME,
     help='Build and run an application',
     subcommands = {
-        'kit': ({'help': 'Prepare an application to build'}, _ARG),
-        'build': ({'help': 'Prepare to install app@target'}, _ARG),
-        'install': ({'help': 'Prepare to run app@target'}, _ARG),
-        'run': ({'help': 'Run app@target'}, _ARG),
+        'kit': ({ 'help': 'Prepare an application to build' }, _mupyOptions()),
+        'build': ({ 'help': 'Prepare to install app@target' }, _mupyOptions()),
+        'install': ({ 'help': 'Prepare to run app@target' }, _mupyOptions()),
+        'run': ({ 'help': 'Run app@target' },
+                _mupyOptions({
+                    '--silent': {
+                        'action': 'store_true', 'default': False,
+                        'help': 'Suppress execution output; Implies --quiet',
+                    }
+                })
+        ),
     },
 )
 class MuPy(Command):
@@ -160,7 +170,9 @@ class MuPy(Command):
         
     def _getApp(self):
         return content.App.fromConfiguration(
-            self._configuration, MuPy.Arg.fromString(self._args.arg).app
+            self._configuration, MuPy.Arg.fromString(
+                vars(self._args)['app[@target]']
+            ).app
         )
 
     def _getLibs(self):
@@ -168,7 +180,9 @@ class MuPy(Command):
 
     def _getTarget(self):
         return content.Target.fromConfiguration(
-            self._configuration, MuPy.Arg.fromString(self._args.arg).target
+            self._configuration, MuPy.Arg.fromString(
+                vars(self._args)['app[@target]']
+            ).target
         )
 
     def kit(self):
@@ -181,7 +195,8 @@ class MuPy(Command):
         return self.build().install()
 
     def run(self):
-        return self.install().run()
+        if self._args.silent: Quiet.set(True)
+        return self.install().run(isSilent=self._args.silent)
 
 
 def _main(cls):
@@ -210,7 +225,7 @@ def _main(cls):
         '-q', '--quiet',
         default=os.environ.get('MUPY_QUIET', False),
         action='store_true',
-        help="Configuration file name\ndefault='%(default)s'",
+        help='Suppress terminal output',
     )
     subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
     for subcommand, (arguments, suboptions) in cls.SUBCOMMANDS.items():
