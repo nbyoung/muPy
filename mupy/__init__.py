@@ -36,7 +36,7 @@ from . import version
 _MUPY = version.NAME
 _MUPY_HOST = f'{_MUPY}-host'
 _MUPY_TARGET = f'{_MUPY}-target'
-_MUPY_YAML = 'mupy.yml'
+_MUPY_HOST_YAML = 'mupy-host.yml'
 
 def command(name, help='Command help', subcommands={}):
     def _command(cls):
@@ -66,10 +66,10 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
     _MUPY_HOST,
     help='Modify the host setup',
     subcommands = {
-        'init': ({'help': f"1. Create the host configuration file, '{_MUPY_YAML}'"}, {
+        'init': ({'help': f"1. Create the host configuration file, '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing file', 'action': 'store_true' },
         }),
-        'install': ({'help': f"2. Install the files specified in '{_MUPY_YAML}'"}, {
+        'install': ({'help': f"2. Install the files specified in '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
         }),
         'remove': ({'help': f"3. Remove the Docker images"}, {
@@ -218,7 +218,7 @@ def _main(cls):
     )
     parser.add_argument(
         '-c', '--configuration',
-        default=os.environ.get('MUPY_CONFIGURATION', _MUPY_YAML),
+        default=os.environ.get('MUPY_HOST', _MUPY_HOST_YAML),
         help="Configuration file name\ndefault='%(default)s'",
     )
     parser.add_argument(
