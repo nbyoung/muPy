@@ -5,7 +5,7 @@ import re
 import semantic_version
 import yaml
 
-from . import mupy
+from . import mupy_host
 from . import version
 from .quiet import Quiet; qprint = Quiet.qprint
 
@@ -37,7 +37,7 @@ class Configuration:
                 qprint(f"Renamed to '{rename}'")
                 mode = 'w'
             with open(path, mode) as file:
-                file.write(mupy.YAML)
+                file.write(mupy_host.YAML)
         except:
             raise ConfigurationOverwriteError(
                 'Cannot create {0}'.format(path))
