@@ -557,9 +557,9 @@ class Install:
 
     def run(self, isSilent=False):
         self._build.target.run(self, isSilent=isSilent)
-        return Runtime(self)
+        return Runner(self)
 
-class Runtime:
+class Runner:
 
     def __init__(self, install):
         self._install = install

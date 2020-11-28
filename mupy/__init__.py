@@ -36,7 +36,7 @@ from . import version
 _MUPY = version.NAME
 _MUPY_HOST = f'{_MUPY}-host'
 _MUPY_TARGET = f'{_MUPY}-target'
-_MUPY_HOST_YAML = 'mupy-host.yml'
+_MUPY_HOST_YAML = 'mupy-host.yaml'
 
 def command(name, help='Command help', subcommands={}):
     def _command(cls):
@@ -107,7 +107,7 @@ class Host(Command):
 
 @command(
     _MUPY_TARGET,
-    help='Modify the target runtimes',
+    help='Modify the target',
     subcommands = {
         'list': ({}, {}),
     },
