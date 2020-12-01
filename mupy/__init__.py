@@ -30,7 +30,10 @@ from .configuration import (
     ConfigurationSyntaxError,
     )
 from . import content
+from . import design
+from . import host
 from .quiet import Quiet; qprint = Quiet.qprint
+from . import syntax
 from . import version
 
 _MUPY = version.NAME
@@ -69,10 +72,11 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
         'init': ({'help': f"1. Create the host configuration file, '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing file', 'action': 'store_true' },
         }),
-        'install': ({'help': f"2. Install the files specified in '{_MUPY_HOST_YAML}'"}, {
+        'setup': ({'help': f"2. Set up the configuration in '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
         }),
-        'remove': ({'help': f"3. Remove the Docker images"}, {
+        'demo': ({'help': f"3. Install the demo files"}, {
+            '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
         }),
         'show': ({'help': f'4. Display the host setup details'}, {
         }),
@@ -83,14 +87,13 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 )
 class Host(Command):
 
-    def install(self):
-        content.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
-        qprint(f"Installing from '{self._configuration.path}'")
-        host = content.Host.fromConfiguration(self._configuration)
-        host.install(self._args.force)
+    def setup(self):
+        host.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
+        qprint(f"Setting up from '{self._configuration.path}'")
+        host.Host.fromConfiguration(self._configuration).setup(self._args.force)
         for name in ('cpython', 'micropython'):
             try:
-                content.Mode.fromConfiguration(self._configuration, name).install()
+                host.Mode.fromConfiguration(self._configuration, name).install()
             except KeyError:
                 raise ConfigurationMissingError(
                     f"Missing mode configuration for '{name}'"
@@ -103,7 +106,7 @@ class Host(Command):
             qprint(f"Wrote file '{path}'")
 
     def remove(self):
-        content.DockerMode.removeAllImages()
+        host.DockerMode.removeAllImages()
 
 @command(
     _MUPY_TARGET,
@@ -115,11 +118,17 @@ class Host(Command):
 class Target(Command):
     pass
 
+_ARG_APP = 'ensemble[+entry][@target]'
+
 def _mupyOptions(options={}):
     args = {
-        'app[@target]': {
-            'help': 'Select a non-default app and/or target',
-            'type': str, 'nargs': '?', 'default': '@',
+        _ARG_APP: {
+            'help': 'Select an ensemble, with an optional entry point and target',
+            'type': str,
+        },
+        '--grade': {
+            'help': 'Define the cutoff grade',
+            'type': str,
         },
     }
     args.update(options)
@@ -129,6 +138,7 @@ def _mupyOptions(options={}):
     version.NAME,
     help='Build and run an application',
     subcommands = {
+        'stock': ({ 'help': 'Show the available stock' }, _mupyOptions()),
         'kit': ({ 'help': 'Prepare an application to build' }, _mupyOptions()),
         'build': ({ 'help': 'Prepare to install app@target' }, _mupyOptions()),
         'install': ({ 'help': 'Prepare to run app@target' }, _mupyOptions()),
@@ -144,59 +154,55 @@ def _mupyOptions(options={}):
 )
 class MuPy(Command):
 
-    class Arg:
+    class App:
 
         @classmethod
         def fromString(cls, string):
             string = string.strip()
-            string = string if '@' in string else string + '@'
+            string = string if ':' in string else ':' + string
+            string = string if '#' in string else string + '#'
             app, target = string.split('@')
             return cls(app or None, target or None)
 
-        def __init__(self, app, target):
-            self._app = app
+        def __init__(self, ensemble, entry=None, target=None):
+            self._ensemble = ensemble
+            self._entry = entry
             self._target = target
 
         def __repr__(self): return f'{self._app or ""}@{self._target or ""}'
 
         @property
-        def app(self): return self._app
+        def ensemble(self): return self._ensemble
+
+        @property
+        def entry(self): return self._entry
 
         @property
         def target(self): return self._target
 
-    def _getHost(self):
-        return content.Host.fromConfiguration(self._configuration)
+    def __init__(self, configuration, args):
+        super().__init__(configuration, args)
+        self._host = host.Host.fromConfiguration(configuration)
+        self._grade = vars(args)['grade'] or None
+        if self._grade: syntax.Identifier.check(self._grade)
+        self._app = syntax.App.parse(vars(args)[_ARG_APP])
+
+    def stock(self):
+        stock = design.Stock.fromPath(self._host.stockPath, self._grade)
+        return print(stock.path, stock.grade)
+
+    # def kit(self):
+    #     return self._getApp().kit(self._host)
+
+    # def build(self):
+    #     return self.kit().build(self._getTarget())
         
-    def _getApp(self):
-        return content.App.fromConfiguration(
-            self._configuration, MuPy.Arg.fromString(
-                vars(self._args)['app[@target]']
-            ).app
-        )
+    # def install(self):
+    #     return self.build().install()
 
-    def _getLibs(self):
-        return content.Libs.fromConfiguration(self._configuration)
-
-    def _getTarget(self):
-        return content.Target.fromConfiguration(
-            self._configuration, MuPy.Arg.fromString(
-                vars(self._args)['app[@target]']
-            ).target
-        )
-
-    def kit(self):
-        return self._getApp().kit(self._getHost(), self._getLibs())
-
-    def build(self):
-        return self.kit().build(self._getTarget())
-        
-    def install(self):
-        return self.build().install()
-
-    def run(self):
-        if self._args.silent: Quiet.set(True)
-        return self.install().run(isSilent=self._args.silent)
+    # def run(self):
+    #     if self._args.silent: Quiet.set(True)
+    #     return self.install().run(isSilent=self._args.silent)
 
 
 def _main(cls):
@@ -243,7 +249,7 @@ def _main(cls):
                 Configuration.init(path, args.force)
                 qprint(f"Created '{path}'")
                 qprint(f"  Edit the configuration in '{filename}'")
-                qprint(f"  Then run '{Host.COMMAND} install'")
+                qprint(f"  Then run '{Host.COMMAND} setup'")
                 return
             configuration = Configuration.fromSearch(directory, filename)
             command = cls(configuration, args)

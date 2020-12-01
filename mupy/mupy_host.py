@@ -1,30 +1,12 @@
 from . import version
-from .content import Host
+from .host import Host
 
 PYTHONPATH = '/flash/lib'
     
 YAML = f"""
-default:
-  app:          first
-  target:       python
-
 directory:
-  lib:          "{Host.LIB}"
-  app:          "{Host.APP}"
-  dev:          "{Host.DEV}"
+  stock:        "{Host.STOCK}"
   build:        "{Host.BUILD}"
-  
-libs:
-
-  - name:       slogan
-    directory:  "message"
-
-apps:
-
-  - name:       first
-    directory:  "hello"
-    libs:
-      - slogan
 
 targets:
 
@@ -91,19 +73,4 @@ mode:
         #COPY ./app/main.py ./
 
         CMD ["micropython", "main.py"]
-
-files:
-
-  - path:       "app/hello/main.py"
-    content: |
-      from slogan import MESSAGE
-      print(MESSAGE)
-
-  - path:       "lib/message/__init__.py"
-    content: |
-      MESSAGE = "Hello, world!"
-
-  - path:       "dev/lib/message/__init__.py"
-    content: |
-      MESSAGE = "MuPy rocks!"
 """
