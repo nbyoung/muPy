@@ -118,17 +118,17 @@ class Host(Command):
 class Target(Command):
     pass
 
-_ARG_APP = 'ensemble[+entry][@target]'
+_APP = 'ensemble+entry[@target]'
 
 def _mupyOptions(options={}):
     args = {
-        _ARG_APP: {
-            'help': 'Select an ensemble, with an optional entry point and target',
+        '--grade': {
+            'help': 'Do not use stock lower than this grade',
             'type': str,
         },
-        '--grade': {
-            'help': 'Define the cutoff grade',
-            'type': str,
+        _APP: {
+            'help': 'Select an ensemble and entry part with an optional target',
+            'type': str, 'nargs': '?', 'default': '+',
         },
     }
     args.update(options)
@@ -139,6 +139,7 @@ def _mupyOptions(options={}):
     help='Build and run an application',
     subcommands = {
         'stock': ({ 'help': 'Show the available stock' }, _mupyOptions()),
+        'bom': ({ 'help': 'Show the import tree for a part' }, _mupyOptions()),
         'kit': ({ 'help': 'Prepare an application to build' }, _mupyOptions()),
         'build': ({ 'help': 'Prepare to install app@target' }, _mupyOptions()),
         'install': ({ 'help': 'Prepare to run app@target' }, _mupyOptions()),
@@ -185,11 +186,27 @@ class MuPy(Command):
         self._host = host.Host.fromConfiguration(configuration)
         self._grade = vars(args)['grade'] or None
         if self._grade: syntax.Identifier.check(self._grade)
-        self._app = syntax.App.parse(vars(args)[_ARG_APP])
+        self._app = (
+            syntax.App.parse(vars(args)[_APP]) if vars(args)[_APP] else None
+        )
+
+    def _stock(self):
+        return design.Stock.fromPath(self._host.stockPath, self._grade)
 
     def stock(self):
-        stock = design.Stock.fromPath(self._host.stockPath, self._grade)
-        return print(stock.path, stock.grade)
+        stock = self._stock()
+        print(f"{stock.grade} {stock.path / stock.grade}")
+        for ensembleSet in stock._ensembleSets:
+            for ensemble in ensembleSet:
+                print(f"  {ensemble.name} {ensemble.rpath}")
+                print(f"    exports: {[e for e in ensemble.exports]}")
+                print(f"    imports:")
+                for imprt in ensemble.imports:
+                    print(f"      {imprt.name}: {['%s:%s' % (k, v) for k, v in imprt.aliases.items()]}")
+                    
+
+    def bom(self):
+        return self._stock().bom(self._app.ensemble, self._app.entry)
 
     # def kit(self):
     #     return self._getApp().kit(self._host)

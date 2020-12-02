@@ -22,7 +22,7 @@ class Identifier(_Syntax):
 
 class App(_Syntax):
 
-    _re = f'({Identifier._re})(\+{Identifier._re})?(@{Identifier._re})?'
+    _re = f'({Identifier._re})(\+{Identifier._re})(@{Identifier._re})?'
     _pattern = re.compile(_re)
     _namedtuple = namedtuple('App', ('ensemble', 'entry', 'target', ))
 

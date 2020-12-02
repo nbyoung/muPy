@@ -39,6 +39,15 @@ class Stock:
 
     @property
     def grade(self): return self._grade
+
+    def _getEnsemble(self, ensembleName, partName):
+        for ensembleSet in self._ensembleSets:
+            for ensemble in ensembleSet:
+                if ensemble.name is not ensembleName: continue
+                print(ensemble.name)
+
+    def bom(self, ensembleName, partName):
+        self._getEnsemble(ensembleName, partName)
     
 class Part:
 
@@ -92,16 +101,29 @@ class Import:
                 raise EnsembleSemanticError(
                     f"Missing import name in {l}"
                 )
-            name = syntax.Identifier.check(p['name'], l)
-            alias = syntax.Identifier.check(p.get('as', name), l)
-            aliases[name] = alias
+            aname = syntax.Identifier.check(p['name'], l)
+            alias = syntax.Identifier.check(p.get('as', aname), l)
+            if alias in aliases:
+                raise EnsembleSemanticError(
+                    f"Duplicate import alias '{alias}' in {l}"
+                )
+            aliases[alias] = aname
         version = dictionary.get('version')
         return cls(name, aliases, version)
 
-    def __init__(self, name, aliases=(), version=None):
+    def __init__(self, name, aliases, version):
         self._name = name
         self._aliases = aliases
         self._version = version
+
+    @property
+    def name(self): return self._name
+
+    @property
+    def version(self): return self._version
+
+    @property
+    def aliases(self): return self._aliases
     
 class EnsembleFileError(OSError): pass
 class EnsembleSyntaxError(ValueError): pass
@@ -120,7 +142,7 @@ class Ensemble:
                     mupyPath = pathlib.Path(dirpath) / filename
                     name = Ensemble.nameFromPath(mupyPath)
                     if name in [e.name for e in ensembleSet]:
-                        raise EnsembleError(
+                        raise EnsembleSemanticError(
                             f'Duplicate ensemble {name} in {mupyPath}'
                         )
                     else:
@@ -162,7 +184,10 @@ class Ensemble:
                 [Import.fromDictionary(i, f'{mupyPath} imports')
                  for i in content.get('imports', ())]
             )
-            return cls(mupyPath.relative_to(path), cls.nameFromPath(mupyPath))
+            return cls(
+                mupyPath.relative_to(path), cls.nameFromPath(mupyPath), parts,
+                exports=exports, imports=imports, version=version,
+            )
 
     def __init__(
             self, rpath, name, parts, exports=(), imports=(), version=None
@@ -191,3 +216,13 @@ class Ensemble:
 
     @property
     def version(self): return self._version
+
+    def getPart(self, name):
+        parts = filter(lambda p: p.name == name, self._parts)
+        if 1 < len(parts):
+            raise EnsembleSemanticError(
+                f"Duplicate part '{name}' in ensemble '{self._name}'"
+            )
+        return parts[0] if 1 == len(parts) else None
+
+                
