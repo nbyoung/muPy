@@ -85,8 +85,8 @@ class Part:
     @property
     def uses(self): return ()
 
-    def asYAML(self, prefix='', margin=0, indent=2):
-        return prefix + ('\n'.join([f'{" "*margin}{line}' for line in (
+    def asYAML(self, delimiter='', margin=0, indent=2):
+        return delimiter + ('\n'.join([f'{" "*margin}{line}' for line in (
             f'name: {self._name}',
             f'path: "{self._path}"',
             f'uses: [ {", ".join(self._uses)} ]' if self._uses else '',
@@ -132,8 +132,8 @@ class Import:
     @property
     def aliases(self): return self._aliases
 
-    def asYAML(self, prefix='', margin=0, indent=2):
-        return prefix + ('\n'.join([f'{" "*margin}{line}' for line in (
+    def asYAML(self, delimiter='', margin=0, indent=2):
+        return delimiter + ('\n'.join([f'{" "*margin}{line}' for line in (
             f'name: {self._name}',
             f'version: "{self._version}"',
             f'parts:\n%s' % (
@@ -248,8 +248,8 @@ class Ensemble:
             )
         return parts[0] if 1 == len(parts) else None
 
-    def asYAML(self, prefix='', margin=0, indent=2):
-        return prefix + '\n'.join([f'{" "*margin}{line}' for line in (
+    def asYAML(self, delimiter='', margin=0, indent=2):
+        return delimiter + '\n'.join([f'{" "*margin}{line}' for line in (
             f'# {self._name} "{self._grade}/{self._rpath}"',
             f'exports: [ {", ".join(self._exports)} ]',
             f'parts:\n%s' % '\n'.join(

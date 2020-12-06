@@ -198,7 +198,7 @@ class MuPy(Command):
         print(f"{stock.grade} {stock.path / stock.grade}")
         for ensembleSet in stock._ensembleSets:
             for ensemble in ensembleSet:
-                qprint(ensemble.asYAML(prefix='--\n'))
+                qprint(ensemble.asYAML(delimiter='--\n'))
                     
 
     def bom(self):
