@@ -40,14 +40,16 @@ class Stock:
     @property
     def grade(self): return self._grade
 
-    def _getEnsemble(self, ensembleName, partName):
-        for ensembleSet in self._ensembleSets:
-            for ensemble in ensembleSet:
-                if ensemble.name is not ensembleName: continue
-                print(ensemble.name)
+    # def _getEnsemble(self, ensembleName, partName):
+    #     ensembles = []
+    #     for ensembleSet in self._ensembleSets:
+    #         partName in ensemble.exports for ensemble in ensembleSet if ensemble.name == ensembleName]
+    #             : continue
+    #             if partName in ensemble.exports
 
     def bom(self, ensembleName, partName):
-        self._getEnsemble(ensembleName, partName)
+        #self._getEnsemble(ensembleName, partName)
+        pass
     
 class Part:
 
@@ -74,8 +76,6 @@ class Part:
         self._path = path
         self._uses = uses
 
-    def __str__(self): return f'{self._name}@{self._path.basename()}'
-
     @property
     def name(self): return self._name
 
@@ -84,6 +84,13 @@ class Part:
 
     @property
     def uses(self): return ()
+
+    def asYAML(self, prefix='', margin=0, indent=2):
+        return prefix + ('\n'.join([f'{" "*margin}{line}' for line in (
+            f'name: {self._name}',
+            f'path: "{self._path}"',
+            f'uses: [ {", ".join(self._uses)} ]' if self._uses else '',
+        ) if line]))
 
 class Import:
 
@@ -124,6 +131,16 @@ class Import:
 
     @property
     def aliases(self): return self._aliases
+
+    def asYAML(self, prefix='', margin=0, indent=2):
+        return prefix + ('\n'.join([f'{" "*margin}{line}' for line in (
+            f'name: {self._name}',
+            f'version: "{self._version}"',
+            f'parts:\n%s' % (
+            '\n'.join([f'{" "*(margin+indent)}- {{ import: {v}, as: {k} }}'
+                       for k, v in self._aliases.items()])
+            )
+        )]))
     
 class EnsembleFileError(OSError): pass
 class EnsembleSyntaxError(ValueError): pass
@@ -185,19 +202,25 @@ class Ensemble:
                  for i in content.get('imports', ())]
             )
             return cls(
+                os.path.basename(path),
                 mupyPath.relative_to(path), cls.nameFromPath(mupyPath), parts,
                 exports=exports, imports=imports, version=version,
             )
 
     def __init__(
-            self, rpath, name, parts, exports=(), imports=(), version=None
+            self, grade, rpath, name, parts,
+            exports=(), imports=(), version=None,
     ):
+        self._grade = grade
         self._rpath = rpath
         self._name = name
         self._parts = parts
         self._exports = exports
         self._imports = imports
         self._version = version
+
+    @property
+    def grade(self): return self._grade
 
     @property
     def rpath(self): return self._rpath
@@ -225,4 +248,16 @@ class Ensemble:
             )
         return parts[0] if 1 == len(parts) else None
 
-                
+    def asYAML(self, prefix='', margin=0, indent=2):
+        return prefix + '\n'.join([f'{" "*margin}{line}' for line in (
+            f'# {self._name}: "{self._grade}/{self._rpath}"',
+            f'exports: [ {", ".join(self._exports)} ]',
+            f'parts:\n%s' % '\n'.join(
+                [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
+                 for i in self._parts]
+            ) if self._parts else '',
+            f'imports:\n%s' % '\n'.join(
+                [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
+                 for i in self._imports]
+            ) if self._imports else '',
+        ) if line])

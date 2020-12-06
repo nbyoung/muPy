@@ -198,11 +198,7 @@ class MuPy(Command):
         print(f"{stock.grade} {stock.path / stock.grade}")
         for ensembleSet in stock._ensembleSets:
             for ensemble in ensembleSet:
-                print(f"  {ensemble.name} {ensemble.rpath}")
-                print(f"    exports: {[e for e in ensemble.exports]}")
-                print(f"    imports:")
-                for imprt in ensemble.imports:
-                    print(f"      {imprt.name}: {['%s:%s' % (k, v) for k, v in imprt.aliases.items()]}")
+                qprint(ensemble.asYAML(prefix='--\n'))
                     
 
     def bom(self):
