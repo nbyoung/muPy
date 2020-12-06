@@ -250,7 +250,7 @@ class Ensemble:
 
     def asYAML(self, prefix='', margin=0, indent=2):
         return prefix + '\n'.join([f'{" "*margin}{line}' for line in (
-            f'# {self._name}: "{self._grade}/{self._rpath}"',
+            f'# {self._name} "{self._grade}/{self._rpath}"',
             f'exports: [ {", ".join(self._exports)} ]',
             f'parts:\n%s' % '\n'.join(
                 [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
