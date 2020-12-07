@@ -8,7 +8,7 @@ from . import syntax
 
 _MUPY = version.NAME
 
-def EntryName(ensembleName, partName): return f'{ensembleName}+{partName}'
+def EntryName(ensembleName, partName): return f'{ensembleName}^{partName}'
     
 class Part:
 
@@ -253,7 +253,7 @@ class Component:
     def part(self): return self._part
 
     @property
-    def name(self): return f'{self._ensemble.name}+{self._part.name}'
+    def name(self): return f'{EntryName(self._ensemble.name, self._part.name)}'
 
 class StockError(ValueError): pass
 
@@ -338,14 +338,14 @@ class BOM:
             imprt = getImport()
             if isLocal and imprt:
                 raise BOMError(
-                    f"Local {component.ensemble.name}+{partName} also imported"
+                    f"Local {EntryName(component.ensemble.name, partName)} also imported"
                 )
             elif isLocal:
                 return (component.ensemble.name, partName, True)
             elif imprt:
                 return (imprt.name, imprt.aliases[partName], False)
             raise BOMError(
-                f"Undefined {component.ensemble.name}+{partName}"
+                f"Undefined {EntryName(component.ensemble.name, partName)}"
             )
         children = [
             cls.fromStock(

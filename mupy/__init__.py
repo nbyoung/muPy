@@ -118,7 +118,7 @@ class Host(Command):
 class Target(Command):
     pass
 
-_APP = 'ensemble+entry[@target]'
+_APP = 'ensemble^entry[@target]'
 
 def _mupyOptions(options={}):
     args = {
@@ -207,7 +207,7 @@ class MuPy(Command):
             qprint(
                 f'{" "*indent}'
                 + f'{component.ensemble.grade}'
-                + f'[{component.ensemble.name}+{component.part.name}]'
+                + f'[{component.ensemble.name}^{component.part.name}]'
             )
         self._bom(self._app.ensemble, self._app.entry).walk(
             printComponent, lambda arg: arg + 2, 0
