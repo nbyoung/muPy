@@ -1,3 +1,4 @@
+from collections.abc import MutableSet
 import os
 import pathlib
 import yaml
@@ -7,49 +8,7 @@ from . import syntax
 
 _MUPY = version.NAME
 
-class StockError(ValueError): pass
-
-class Stock:
-
-    @classmethod
-    def fromPath(cls, path, grade=None):
-        if not (path.exists() and path.is_dir()):
-            raise StockError(f"Stock directory does not exist, '{path}'")
-        def pathGrade(path):
-            return os.path.basename(path)
-        gradeFilter = (
-            (lambda _: True) if grade is None
-            else (lambda name: name <= grade)
-        )
-        gradePaths = sorted([
-            dE.path for dE in os.scandir(path)
-            if dE.is_dir() and gradeFilter(pathGrade(dE.path))
-        ], key=pathGrade, reverse=True)
-        return cls(
-            path, grade, tuple([Ensemble.setFromPath(gP) for gP in gradePaths])
-        )
-
-    def __init__(self, path, grade, ensembleSets=()):
-        self._path = path
-        self._grade = grade
-        self._ensembleSets = ensembleSets
-
-    @property
-    def path(self): return self._path
-
-    @property
-    def grade(self): return self._grade
-
-    # def _getEnsemble(self, ensembleName, partName):
-    #     ensembles = []
-    #     for ensembleSet in self._ensembleSets:
-    #         partName in ensemble.exports for ensemble in ensembleSet if ensemble.name == ensembleName]
-    #             : continue
-    #             if partName in ensemble.exports
-
-    def bom(self, ensembleName, partName):
-        #self._getEnsemble(ensembleName, partName)
-        pass
+def EntryName(ensembleName, partName): return f'{ensembleName}+{partName}'
     
 class Part:
 
@@ -83,7 +42,7 @@ class Part:
     def path(self): return self._path
 
     @property
-    def uses(self): return ()
+    def uses(self): return self._uses
 
     def asYAML(self, delimiter='', margin=0, indent=2):
         return delimiter + ('\n'.join([f'{" "*margin}{line}' for line in (
@@ -147,26 +106,6 @@ class EnsembleSyntaxError(ValueError): pass
 class EnsembleSemanticError(ValueError): pass
 
 class Ensemble:
-
-    @classmethod
-    def setFromPath(cls, path):
-        def isMuPy(filename):
-            return pathlib.PurePath(filename).suffix == f'.{_MUPY}'
-        ensembleSet=set()
-        for dirpath, dirnames, filenames in os.walk(path, followlinks=True):
-            for filename in filenames:
-                if isMuPy(filename):
-                    mupyPath = pathlib.Path(dirpath) / filename
-                    name = Ensemble.nameFromPath(mupyPath)
-                    if name in [e.name for e in ensembleSet]:
-                        raise EnsembleSemanticError(
-                            f'Duplicate ensemble {name} in {mupyPath}'
-                        )
-                    else:
-                        ensembleSet.add(
-                            Ensemble.fromPaths(path, mupyPath)
-                        )
-        return ensembleSet
 
     @staticmethod
     def nameFromPath(path):
@@ -240,13 +179,16 @@ class Ensemble:
     @property
     def version(self): return self._version
 
+    def isExport(self, name): return name in self._exports
+
     def getPart(self, name):
-        parts = filter(lambda p: p.name == name, self._parts)
-        if 1 < len(parts):
+        parts = [p for p in self._parts if p.name == name]
+        if 1 == len(parts):
+            return parts[0]
+        elif 1 < len(parts):
             raise EnsembleSemanticError(
                 f"Duplicate part '{name}' in ensemble '{self._name}'"
             )
-        return parts[0] if 1 == len(parts) else None
 
     def asYAML(self, delimiter='', margin=0, indent=2):
         return delimiter + '\n'.join([f'{" "*margin}{line}' for line in (
@@ -261,3 +203,169 @@ class Ensemble:
                  for i in self._imports]
             ) if self._imports else '',
         ) if line])
+
+class EnsembleSet(MutableSet):
+
+    @classmethod
+    def fromPath(cls, grade, path):
+        def isMuPy(filename):
+            return pathlib.PurePath(filename).suffix == f'.{_MUPY}'
+        ensembleSet=cls(grade)
+        for dirpath, dirnames, filenames in os.walk(path, followlinks=True):
+            for filename in filenames:
+                if isMuPy(filename):
+                    mupyPath = pathlib.Path(dirpath) / filename
+                    name = Ensemble.nameFromPath(mupyPath)
+                    if name in [e.name for e in ensembleSet]:
+                        gradeLevel = f'grade level {grade} ' if grade else ''
+                        raise EnsembleSemanticError(
+                            f"Stock {gradeLevel}contains duplicate ensemble '{name}'"
+                        )
+                    else:
+                        ensembleSet.add(
+                            Ensemble.fromPaths(path, mupyPath)
+                        )
+        return ensembleSet
+
+    def __init__(self, grade):
+        self._grade = grade
+        self._set = set()
+        
+    def __contains__(self, member): return self._set.__contains__(member)
+    def __iter__(self): return self._set.__iter__()
+    def __len__(self): return self._set.__len__()
+    def add(self, member): return self._set.add(member)
+    def discard(self, member): return self._set.discard(member)
+
+    @property
+    def grade(self): return self._grade
+    
+class Component:
+
+    def __init__(self, ensemble, part):
+        self._ensemble = ensemble
+        self._part = part
+
+    @property
+    def ensemble(self): return self._ensemble
+
+    @property
+    def part(self): return self._part
+
+    @property
+    def name(self): return f'{self._ensemble.name}+{self._part.name}'
+
+class StockError(ValueError): pass
+
+class Stock:
+
+    @classmethod
+    def fromPath(cls, path, grade=None):
+        if not (path.exists() and path.is_dir()):
+            raise StockError(f"Stock directory does not exist, '{path}'")
+        def pathGrade(path):
+            return os.path.basename(path)
+        gradeFilter = (
+            (lambda _: True) if grade is None
+            else (lambda name: name <= grade)
+        )
+        gradePaths = sorted([
+            dE.path for dE in os.scandir(path)
+            if dE.is_dir() and gradeFilter(pathGrade(dE.path))
+        ], key=pathGrade, reverse=True)
+        return cls(
+            path, grade, tuple([EnsembleSet.fromPath(grade, gP)
+                                for gP in gradePaths])
+        )
+
+    def __init__(self, path, grade, ensembleSets=()):
+        self._path = path
+        self._grade = grade
+        self._ensembleSets = ensembleSets
+
+    @property
+    def path(self): return self._path
+
+    @property
+    def grade(self): return self._grade
+
+    @property
+    def ensembleSets(self): return self._ensembleSets
+
+    def getComponent(self, ensembleName, partName, doLocal=False):
+        entryName = EntryName(ensembleName, partName)
+        for ensembleSet in self._ensembleSets:
+            components = [
+                Component(e, e.getPart(partName))
+                for e in ensembleSet
+                if (
+                        e.name == ensembleName
+                        and
+                        (doLocal or e.isExport(partName))
+                )]
+            if 1 == len(components):
+                return components[0]
+            elif 1 < len(components):
+                raise StockError(
+                    f"Grade level {ensembleSet.grade} contains duplicate '{entryName}'"
+                )
+        gradeLevel = f'grade level {self._grade} ' if self._grade else ''
+        raise StockError(
+            f"Stock {gradeLevel}does not export '{entryName}' {doLocal}"
+        )
+
+    def bom(self, ensembleName, partName):
+        return BOM.fromStock(self, self.getComponent(ensembleName, partName))
+
+class BOMError(ValueError): pass
+
+class BOM:
+
+    @classmethod
+    def fromStock(cls, stock, component, ancestorComponents=[]):
+        if component.part in [aC.part for aC in ancestorComponents]:
+            raise BOMError(
+                f"Circular reference with {component.name}>"
+                + ">".join([EntryName(aC.ensemble.name, aC.part.name)
+                           for aC in reversed(ancestorComponents)])
+            )
+        def componentArgs(partName):
+            def getImport():
+                for imprt in component.ensemble.imports:
+                    if partName in imprt.aliases:
+                        return imprt
+            isLocal = partName in [p.name for p in component.ensemble.parts]
+            imprt = getImport()
+            if isLocal and imprt:
+                raise BOMError(
+                    f"Local {component.ensemble.name}+{partName} also imported"
+                )
+            elif isLocal:
+                return (component.ensemble.name, partName, True)
+            elif imprt:
+                return (imprt.name, imprt.aliases[partName], False)
+            raise BOMError(
+                f"Undefined {component.ensemble.name}+{partName}"
+            )
+        children = [
+            cls.fromStock(
+                stock,
+                stock.getComponent(*componentArgs(childPartName)),
+                ancestorComponents + [component],
+            )
+            for childPartName in component.part.uses
+        ]
+        return cls(component, children)
+
+    def __init__(self, component, children=()):
+        self._component = component
+        self._children = children
+
+    def walk(
+            self,
+            callback=lambda component, arg: None,
+            nextArg=lambda arg: None, arg=None,
+    ):
+        callback(self._component, arg)
+        for child in self._children:
+            child.walk(callback, nextArg, nextArg(arg))

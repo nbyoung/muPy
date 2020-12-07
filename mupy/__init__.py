@@ -195,14 +195,23 @@ class MuPy(Command):
 
     def stock(self):
         stock = self._stock()
-        print(f"{stock.grade} {stock.path / stock.grade}")
-        for ensembleSet in stock._ensembleSets:
+        for ensembleSet in stock.ensembleSets:
             for ensemble in ensembleSet:
                 qprint(ensemble.asYAML(delimiter='--\n'))
                     
-
-    def bom(self):
+    def _bom(self, ensembleName, entryName):
         return self._stock().bom(self._app.ensemble, self._app.entry)
+                    
+    def bom(self):
+        def printComponent(component, indent):
+            qprint(
+                f'{" "*indent}'
+                + f'{component.ensemble.grade}'
+                + f'[{component.ensemble.name}+{component.part.name}]'
+            )
+        self._bom(self._app.ensemble, self._app.entry).walk(
+            printComponent, lambda arg: arg + 2, 0
+        )
 
     # def kit(self):
     #     return self._getApp().kit(self._host)
