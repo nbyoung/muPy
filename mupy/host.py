@@ -32,16 +32,16 @@ class Host:
         self._buildPath = build
 
     @property
+    def parentPath(self): return self._parent
+
+    @property
     def stockPath(self): return self._stockPath
 
-    # @property
-    # def buildPath(self): return self._buildPath
+    @property
+    def buildPath(self): return self._buildPath
     
     @property
     def kitPath(self): return pathlib.Path(self._buildPath / Host.KIT)
-
-    # def kitPath(self, appName):
-    #     return pathlib.Path(self._build / Host.KIT / appName)
     
     def installPath(self, targetName, appName):
         return pathlib.Path(self._build / Host.INSTALL / targetName / appName)

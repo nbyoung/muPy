@@ -214,17 +214,15 @@ class MuPy(Command):
             printComponent, lambda arg: arg + 2, 0
         )
                     
-    def _kit(self, ensembleName, entryName):
+    def kit(self):
+        def callback(fromPath, toPath):
+            qprint(fromPath.relative_to(self._host.parentPath))
+            qprint(f'  {toPath.relative_to(self._host.parentPath)}')
         return design.Kit.fromBOM(
             self._bom(self._app.ensemble, self._app.entry),
             self._host.kitPath,
+            callback,
         )
-
-    def kit(self):
-        qprint(self._kit(self._app.ensemble, self._app.entry)) # TODO Print kit file hierarchy
-
-    # def kit(self):
-    #     return self._getApp().kit(self._host)
 
     # def build(self):
     #     return self.kit().build(self._getTarget())

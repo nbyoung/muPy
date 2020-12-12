@@ -1,6 +1,7 @@
 from collections.abc import MutableSet
 import os
 import pathlib
+import shutil
 import yaml
 
 from . import version
@@ -375,17 +376,41 @@ class BOM:
         for child in self._children:
             child.walk(callback, nextArg, nextArg(arg))
     
+class KitError(ValueError): pass
+    
 class Kit:
+
     @classmethod
-    def fromBOM(cls, bom, path):
-        pairList = []
-        def callback(component, _):
+    def fromBOM(cls, bom, path, callback=lambda fromPath, toPath: None):
+        shutil.rmtree(path, onerror=lambda type, value, tb: None )
+        toPaths = {}
+        def doKit(component, _):
             def rebase(path, name): return path.parent / (name + path.suffix)
             fromPath = component.ensemble.path / component.part.path
             toPath = path / rebase(component.part.path, component.origin)
-            pair = (fromPath, toPath)
-            if pair not in pairList:
-                print(pair)
-                pairList.append(pair)
-        bom.walk(callback)
-        return Kit()
+            if toPath in toPaths:
+                if toPaths[toPath].samefile(fromPath):
+                    return
+                raise KitError(f"Invalid duplicates '{toPaths[toPath]}' and '{fromPath}' both map to {toPath}")
+            toPaths[toPath] = fromPath
+            if fromPath.exists():
+                toPath.parent.mkdir(parents=True, exist_ok=True)
+                if fromPath.is_file():
+                    shutil.copy2(fromPath, toPath)
+                elif fromPath.is_dir():
+                    shutil.copytree(
+                        fromPath, toPath, symlinks=True, copy_function=shutil.copy2
+                    )
+                else:
+                    raise KitError(f"Kit part is not valid '{fromPath}'")
+                callback(fromPath, toPath)
+            else:
+                raise KitError(f"Kit part does not exist '{fromPath}'")
+        bom.walk(doKit)
+        return Kit(path)
+
+    def __init__(self, path):
+        self._path = path
+
+    @property
+    def path(self): return self._path
