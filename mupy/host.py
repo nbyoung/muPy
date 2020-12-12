@@ -34,11 +34,14 @@ class Host:
     @property
     def stockPath(self): return self._stockPath
 
-    @property
-    def buildPath(self): return self._buildPath
+    # @property
+    # def buildPath(self): return self._buildPath
     
-    def kitPath(self, appName):
-        return pathlib.Path(self._build / Host.KIT / appName)
+    @property
+    def kitPath(self): return pathlib.Path(self._buildPath / Host.KIT)
+
+    # def kitPath(self, appName):
+    #     return pathlib.Path(self._build / Host.KIT / appName)
     
     def installPath(self, targetName, appName):
         return pathlib.Path(self._build / Host.INSTALL / targetName / appName)

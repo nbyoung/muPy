@@ -123,7 +123,7 @@ _APP = 'ensemble^entry[@target]'
 def _mupyOptions(options={}):
     args = {
         '--grade': {
-            'help': 'Do not use stock lower than this grade',
+            'help': 'Only use stock at this grade and higher',
             'type': str,
         },
         _APP: {
@@ -200,18 +200,28 @@ class MuPy(Command):
                 qprint(ensemble.asYAML(delimiter='--\n'))
                     
     def _bom(self, ensembleName, entryName):
-        return self._stock().bom(self._app.ensemble, self._app.entry)
+        stock = self._stock()
+        component = stock.getComponent(entryName, self._app.ensemble, self._app.entry)
+        return design.BOM.fromStock(stock, component)
                     
     def bom(self):
         def printComponent(component, indent):
             qprint(
                 f'{" "*indent}'
-                + f'{component.ensemble.grade}'
-                + f'[{component.ensemble.name}^{component.part.name}]'
+                + f'{component.ensemble.grade}[{component.name}]'
             )
         self._bom(self._app.ensemble, self._app.entry).walk(
             printComponent, lambda arg: arg + 2, 0
         )
+                    
+    def _kit(self, ensembleName, entryName):
+        return design.Kit.fromBOM(
+            self._bom(self._app.ensemble, self._app.entry),
+            self._host.kitPath,
+        )
+
+    def kit(self):
+        qprint(self._kit(self._app.ensemble, self._app.entry)) # TODO Print kit file hierarchy
 
     # def kit(self):
     #     return self._getApp().kit(self._host)

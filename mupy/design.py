@@ -22,7 +22,11 @@ class Part:
         path = pathlib.Path(dictionary.get('path'))
         if not path:
             raise EnsembleSemanticError(
-                f"Missing path for '{name}' at {location+name}"
+                f"Missing path for '{name}' in {location}"
+            )
+        if path.is_absolute():
+            raise EnsembleSemanticError(
+                f"Absolute path '{path}' in {location}"
             )
         uses = tuple(
             [syntax.Identifier.check(e, location)
@@ -142,16 +146,16 @@ class Ensemble:
             )
             return cls(
                 os.path.basename(path),
-                mupyPath.relative_to(path), cls.nameFromPath(mupyPath), parts,
+                mupyPath.parent, cls.nameFromPath(mupyPath), parts,
                 exports=exports, imports=imports, version=version,
             )
 
     def __init__(
-            self, grade, rpath, name, parts,
+            self, grade, path, name, parts,
             exports=(), imports=(), version=None,
     ):
         self._grade = grade
-        self._rpath = rpath
+        self._path = path
         self._name = name
         self._parts = parts
         self._exports = exports
@@ -162,7 +166,7 @@ class Ensemble:
     def grade(self): return self._grade
 
     @property
-    def rpath(self): return self._rpath
+    def path(self): return self._path
 
     @property
     def name(self): return self._name
@@ -242,9 +246,13 @@ class EnsembleSet(MutableSet):
     
 class Component:
 
-    def __init__(self, ensemble, part):
+    def __init__(self, origin, ensemble, part):
+        self._origin = origin
         self._ensemble = ensemble
         self._part = part
+
+    @property
+    def origin(self): return self._origin
 
     @property
     def ensemble(self): return self._ensemble
@@ -292,16 +300,16 @@ class Stock:
     @property
     def ensembleSets(self): return self._ensembleSets
 
-    def getComponent(self, ensembleName, partName, doLocal=False):
+    def getComponent(self, origin, ensembleName, partName, isLocal=False):
         entryName = EntryName(ensembleName, partName)
         for ensembleSet in self._ensembleSets:
             components = [
-                Component(e, e.getPart(partName))
+                Component(origin, e, e.getPart(partName))
                 for e in ensembleSet
                 if (
                         e.name == ensembleName
                         and
-                        (doLocal or e.isExport(partName))
+                        (isLocal or e.isExport(partName))
                 )]
             if 1 == len(components):
                 return components[0]
@@ -311,11 +319,8 @@ class Stock:
                 )
         gradeLevel = f'grade level {self._grade} ' if self._grade else ''
         raise StockError(
-            f"Stock {gradeLevel}does not export '{entryName}' {doLocal}"
+            f"Stock {gradeLevel}does not export '{entryName}'"
         )
-
-    def bom(self, ensembleName, partName):
-        return BOM.fromStock(self, self.getComponent(ensembleName, partName))
 
 class BOMError(ValueError): pass
 
@@ -350,7 +355,7 @@ class BOM:
         children = [
             cls.fromStock(
                 stock,
-                stock.getComponent(*componentArgs(childPartName)),
+                stock.getComponent(childPartName, *componentArgs(childPartName)),
                 ancestorComponents + [component],
             )
             for childPartName in component.part.uses
@@ -369,3 +374,18 @@ class BOM:
         callback(self._component, arg)
         for child in self._children:
             child.walk(callback, nextArg, nextArg(arg))
+    
+class Kit:
+    @classmethod
+    def fromBOM(cls, bom, path):
+        pairList = []
+        def callback(component, _):
+            def rebase(path, name): return path.parent / (name + path.suffix)
+            fromPath = component.ensemble.path / component.part.path
+            toPath = path / rebase(component.part.path, component.origin)
+            pair = (fromPath, toPath)
+            if pair not in pairList:
+                print(pair)
+                pairList.append(pair)
+        bom.walk(callback)
+        return Kit()
