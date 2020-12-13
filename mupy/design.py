@@ -3,6 +3,7 @@ import os
 import pathlib
 import shutil
 import yaml
+import zlib
 
 from . import version
 from . import syntax
@@ -10,6 +11,29 @@ from . import syntax
 _MUPY = version.NAME
 
 def EntryName(ensembleName, partName): return f'{ensembleName}^{partName}'
+
+class App:
+
+    def __init__(self, ensemble, entry=None, target=None):
+        self._ensemble = ensemble
+        self._entry = entry
+        self._target = target
+
+    @property
+    def ensemble(self): return self._ensemble
+
+    @property
+    def entry(self): return self._entry
+
+    @property
+    def entryName(self): return EntryName(self._ensemble, self._entry)
+
+    @property
+    def target(self): return self._target
+
+    @property
+    def name(self):
+        return self.entryName + f'@{self._target}' if self._target else ''
     
 class Part:
 
@@ -197,7 +221,7 @@ class Ensemble:
 
     def asYAML(self, delimiter='', margin=0, indent=2):
         return delimiter + '\n'.join([f'{" "*margin}{line}' for line in (
-            f'# {self._name} "{self._grade}/{self._rpath}"',
+            f'# {self._name} "{self._path}"',
             f'exports: [ {", ".join(self._exports)} ]',
             f'parts:\n%s' % '\n'.join(
                 [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
@@ -301,11 +325,11 @@ class Stock:
     @property
     def ensembleSets(self): return self._ensembleSets
 
-    def getComponent(self, origin, ensembleName, partName, isLocal=False):
+    def getComponent(self, originPartName, ensembleName, partName, isLocal=False):
         entryName = EntryName(ensembleName, partName)
         for ensembleSet in self._ensembleSets:
             components = [
-                Component(origin, e, e.getPart(partName))
+                Component(originPartName, e, e.getPart(partName))
                 for e in ensembleSet
                 if (
                         e.name == ensembleName
@@ -414,3 +438,69 @@ class Kit:
 
     @property
     def path(self): return self._path
+
+class BuildError(ValueError): pass
+
+class Build:
+
+    _INSTALL = 'install'
+    _SUFFIX = '.py'
+
+    @staticmethod
+    def hash(path):
+        blksize = os.stat(path).st_blksize
+        adler32 = zlib.adler32(b'')
+        with open(path, 'rb') as file:
+            while True:
+                data = file.read(blksize)
+                if not data: break
+                adler32 = zlib.adler32(data, adler32)
+        return f'{adler32:0>8X}'
+
+    @classmethod
+    def fromKit(cls, kit, path, entryName, target, callback=lambda line: None):
+        buildPath = path
+        installPath = buildPath / Build._INSTALL / target.name
+        cachePath = buildPath / Build._INSTALL / f'{target.name}.{entryName}'
+        if installPath.is_dir():
+            shutil.rmtree(cachePath, onerror=lambda type, value, tb: None )
+            installPath.rename(cachePath)
+        else:
+            shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
+        sourceFromTo = []
+        for directory, dirNames, fileNames in os.walk(kit.path):
+            directory = pathlib.Path(directory)
+            cPath = cachePath / directory.relative_to(kit.path)
+            iPath = installPath / directory.relative_to(kit.path)
+            iPath.mkdir(parents=True, exist_ok=True)
+            for filePath in [pathlib.Path(fN)
+                             for fN in fileNames
+                             if pathlib.Path(fN).suffix == Build._SUFFIX]:
+                sourceHash = Build.hash(directory / filePath)
+                targetFilePath = filePath.with_suffix(f'{target.suffix}.{sourceHash}')
+                if (cPath / targetFilePath).exists():
+                    shutil.copy2(cPath / targetFilePath, iPath / targetFilePath)
+                else:
+                    sourceFromTo.append((
+                        os.path.relpath(
+                            directory / filePath, kit.path),
+                        os.path.relpath(
+                            directory / filePath, buildPath),
+                        os.path.relpath(
+                            (iPath / targetFilePath), buildPath)
+                    ))
+        if sourceFromTo:
+            with target.buildContainer(buildPath, sourceFromTo) as container:
+                for output in container.logs(stream=True):
+                    callback('b: %s' % output.decode('utf-8'))
+        return cls(installPath, target)
+
+    def __init__(self, path, target):
+        self._path = path
+        self._target = target
+
+    @property
+    def path(self): return self._path
+
+    @property
+    def target(self): return self._target

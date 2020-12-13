@@ -29,11 +29,11 @@ from .configuration import (
     ConfigurationMissingError, ConfigurationOverwriteError,
     ConfigurationSyntaxError,
     )
-from . import content
 from . import design
 from . import host
 from .quiet import Quiet; qprint = Quiet.qprint
 from . import syntax
+from . import target
 from . import version
 
 _MUPY = version.NAME
@@ -155,39 +155,23 @@ def _mupyOptions(options={}):
 )
 class MuPy(Command):
 
-    class App:
-
-        @classmethod
-        def fromString(cls, string):
-            string = string.strip()
-            string = string if ':' in string else ':' + string
-            string = string if '#' in string else string + '#'
-            app, target = string.split('@')
-            return cls(app or None, target or None)
-
-        def __init__(self, ensemble, entry=None, target=None):
-            self._ensemble = ensemble
-            self._entry = entry
-            self._target = target
-
-        def __repr__(self): return f'{self._app or ""}@{self._target or ""}'
-
-        @property
-        def ensemble(self): return self._ensemble
-
-        @property
-        def entry(self): return self._entry
-
-        @property
-        def target(self): return self._target
-
     def __init__(self, configuration, args):
         super().__init__(configuration, args)
-        self._host = host.Host.fromConfiguration(configuration)
-        self._grade = vars(args)['grade'] or None
-        if self._grade: syntax.Identifier.check(self._grade)
-        self._app = (
-            syntax.App.parse(vars(args)[_APP]) if vars(args)[_APP] else None
+        self._configuration = configuration
+        self._args = args
+
+    @property
+    def _host(self): return host.Host.fromConfiguration(self._configuration)
+
+    @property
+    def _grade(self): return syntax.Identifier.check(vars(self._args)['grade'])
+
+    @property
+    def _app(self):
+        return (
+            design.App(*syntax.App.parse(vars(self._args)[_APP]))
+            if vars(self._args)[_APP]
+            else None
         )
 
     def _stock(self):
@@ -220,12 +204,19 @@ class MuPy(Command):
             qprint(f'  {toPath.relative_to(self._host.parentPath)}')
         return design.Kit.fromBOM(
             self._bom(self._app.ensemble, self._app.entry),
-            self._host.kitPath,
+            self._host.kitPath(self._app),
             callback,
         )
 
-    # def build(self):
-    #     return self.kit().build(self._getTarget())
+    def build(self):
+        def callback(line): qprint(line, end='')
+        return design.Build.fromKit(
+            self.kit(),
+            self._host.buildPath,
+            self._app.entryName,
+            target.Target.fromConfiguration(self._configuration, self._app.target),
+            callback,
+        )
         
     # def install(self):
     #     return self.build().install()
