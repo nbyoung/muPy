@@ -443,6 +443,7 @@ class BuildError(ValueError): pass
 
 class Build:
 
+    _COMPILE = '.compile'
     _INSTALL = 'install'
     _SUFFIX = '.py'
 
@@ -458,28 +459,27 @@ class Build:
         return f'{adler32:0>8X}'
 
     @classmethod
-    def fromKit(cls, kit, path, entryName, target, callback=lambda line: None):
-        buildPath = path
-        installPath = buildPath / Build._INSTALL / target.name
-        cachePath = buildPath / Build._INSTALL / f'{target.name}.{entryName}'
-        if installPath.is_dir():
+    def fromKit(cls, kit, buildPath, entryName, target, callback=lambda line: None):
+        compilePath = buildPath / Build._COMPILE / entryName / target.name
+        cachePath = buildPath / Build._COMPILE / entryName / f'.{target.name}'
+        if compilePath.is_dir():
             shutil.rmtree(cachePath, onerror=lambda type, value, tb: None )
-            installPath.rename(cachePath)
+            compilePath.rename(cachePath)
         else:
-            shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
+            shutil.rmtree(compilePath, onerror=lambda type, value, tb: None )
         sourceFromTo = []
         for directory, dirNames, fileNames in os.walk(kit.path):
             directory = pathlib.Path(directory)
-            cPath = cachePath / directory.relative_to(kit.path)
-            iPath = installPath / directory.relative_to(kit.path)
-            iPath.mkdir(parents=True, exist_ok=True)
+            hPath = cachePath / directory.relative_to(kit.path)
+            cPath = compilePath / directory.relative_to(kit.path)
+            cPath.mkdir(parents=True, exist_ok=True)
             for filePath in [pathlib.Path(fN)
                              for fN in fileNames
                              if pathlib.Path(fN).suffix == Build._SUFFIX]:
                 sourceHash = Build.hash(directory / filePath)
                 targetFilePath = filePath.with_suffix(f'{target.suffix}.{sourceHash}')
-                if (cPath / targetFilePath).exists():
-                    shutil.copy2(cPath / targetFilePath, iPath / targetFilePath)
+                if (hPath / targetFilePath).exists():
+                    shutil.copy2(hPath / targetFilePath, cPath / targetFilePath)
                 else:
                     sourceFromTo.append((
                         os.path.relpath(
@@ -487,12 +487,21 @@ class Build:
                         os.path.relpath(
                             directory / filePath, buildPath),
                         os.path.relpath(
-                            (iPath / targetFilePath), buildPath)
+                            (cPath / targetFilePath), buildPath)
                     ))
         if sourceFromTo:
             with target.buildContainer(buildPath, sourceFromTo) as container:
                 for output in container.logs(stream=True):
-                    callback('b: %s' % output.decode('utf-8'))
+                    callback(output.decode('utf-8').strip())
+        installPath = buildPath / Build._INSTALL / entryName / target.name
+        shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
+        for directory, dirNames, fileNames in os.walk(compilePath):
+            directory = pathlib.Path(directory)
+            iPath = installPath / directory.relative_to(compilePath)
+            iPath.mkdir(parents=True, exist_ok=True)
+            for fileName in [pathlib.Path(fN) for fN in fileNames]:
+                shutil.copy2(directory / fileName, iPath / fileName.stem)
+                callback(str((iPath / fileName.stem).relative_to(buildPath)))
         return cls(installPath, target)
 
     def __init__(self, path, target):

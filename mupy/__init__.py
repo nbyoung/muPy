@@ -200,8 +200,8 @@ class MuPy(Command):
                     
     def kit(self):
         def callback(fromPath, toPath):
-            qprint(fromPath.relative_to(self._host.parentPath))
-            qprint(f'  {toPath.relative_to(self._host.parentPath)}')
+            qprint(f'  {fromPath.relative_to(self._host.stockPath)}')
+            qprint(toPath.relative_to(self._host.buildPath))
         return design.Kit.fromBOM(
             self._bom(self._app.ensemble, self._app.entry),
             self._host.kitPath(self._app),
@@ -209,7 +209,7 @@ class MuPy(Command):
         )
 
     def build(self):
-        def callback(line): qprint(line, end='')
+        def callback(line): qprint(line)
         return design.Build.fromKit(
             self.kit(),
             self._host.buildPath,
