@@ -93,7 +93,7 @@ class Host(Command):
         host.Host.fromConfiguration(self._configuration).setup(self._args.force)
         for name in ('cpython', 'micropython'):
             try:
-                host.Mode.fromConfiguration(self._configuration, name).install()
+                host.Mode.fromConfiguration(self._configuration, name).install(qprint)
             except KeyError:
                 raise ConfigurationMissingError(
                     f"Missing mode configuration for '{name}'"
@@ -106,7 +106,7 @@ class Host(Command):
             qprint(f"Wrote file '{path}'")
 
     def remove(self):
-        host.DockerMode.removeAllImages()
+        host.DockerMode.removeAllImages(qprint)
 
 @command(
     _MUPY_TARGET,
@@ -164,7 +164,9 @@ class MuPy(Command):
     def _host(self): return host.Host.fromConfiguration(self._configuration)
 
     @property
-    def _grade(self): return syntax.Identifier.check(vars(self._args)['grade'])
+    def _grade(self):
+        grade = vars(self._args)['grade']
+        return None if grade is None else syntax.Identifier.check(grade)
 
     @property
     def _app(self):
@@ -209,21 +211,22 @@ class MuPy(Command):
         )
 
     def build(self):
-        def callback(line): qprint(line)
         return design.Build.fromKit(
             self.kit(),
             self._host.buildPath,
             self._app.entryName,
             target.Target.fromConfiguration(self._configuration, self._app.target),
-            callback,
+            qprint,
         )
         
-    # def install(self):
-    #     return self.build().install()
+    def install(self):
+        return design.Install.fromBuild(self.build(), qprint, Quiet.get())
 
-    # def run(self):
-    #     if self._args.silent: Quiet.set(True)
-    #     return self.install().run(isSilent=self._args.silent)
+    def run(self):
+        if self._args.silent: Quiet.set(True)
+        return design.Runner.fromInstall(
+            self.install(), qprint, isSilent=self._args.silent
+        )
 
 
 def _main(cls):

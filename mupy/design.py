@@ -408,10 +408,12 @@ class Kit:
     def fromBOM(cls, bom, path, callback=lambda fromPath, toPath: None):
         shutil.rmtree(path, onerror=lambda type, value, tb: None )
         toPaths = {}
-        def doKit(component, _):
+        def doKit(component, isMain):
             def rebase(path, name): return path.parent / (name + path.suffix)
             fromPath = component.ensemble.path / component.part.path
-            toPath = path / rebase(component.part.path, component.origin)
+            toPath = path / rebase(
+                component.part.path, 'main' if isMain else component.origin
+            )
             if toPath in toPaths:
                 if toPaths[toPath].samefile(fromPath):
                     return
@@ -430,7 +432,7 @@ class Kit:
                 callback(fromPath, toPath)
             else:
                 raise KitError(f"Kit part does not exist '{fromPath}'")
-        bom.walk(doKit)
+        bom.walk(doKit, lambda arg: False, arg=True)
         return Kit(path)
 
     def __init__(self, path):
@@ -438,8 +440,6 @@ class Kit:
 
     @property
     def path(self): return self._path
-
-class BuildError(ValueError): pass
 
 class Build:
 
@@ -513,3 +513,31 @@ class Build:
 
     @property
     def target(self): return self._target
+
+class Install:
+
+    @classmethod
+    def fromBuild(cls, build, callback=lambda line: None, isQuiet=False):
+        callback(f"Install {build.path}")
+        build.target.install(build.path, isQuiet=isQuiet)
+        return cls(build)
+
+    def __init__(self, build):
+        self._build = build
+
+    @property
+    def build(self): return self._build
+
+class Runner:
+
+    @classmethod
+    def fromInstall(cls, install, callback=lambda line: None, isSilent=False):
+        callback(f"Run {install.build.path}")
+        install.build.target.run(install.build.path, isSilent)
+        return cls(install)
+
+    def __init__(self, install):
+        self._install = install
+
+    @property
+    def install(self): return self._install
