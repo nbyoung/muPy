@@ -81,7 +81,7 @@ class DockerMode(Mode):
     def install(self, callback=lambda line: None):
         docker = Docker.from_env()
         if self._message:
-            callbacl(f'Installing Docker image {self.tag}; {self._message}...')
+            callback(f'Installing Docker image {self.tag}; {self._message}...')
         image, _ = docker.images.build(
             fileobj=io.BytesIO(self._dockerfile.encode('utf-8')),
             tag=f'{self.tag}',

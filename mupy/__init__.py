@@ -88,12 +88,12 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 class Host(Command):
 
     def setup(self):
-        host.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
+        target.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
         qprint(f"Setting up from '{self._configuration.path}'")
         host.Host.fromConfiguration(self._configuration).setup(self._args.force)
         for name in ('cpython', 'micropython'):
             try:
-                host.Mode.fromConfiguration(self._configuration, name).install(qprint)
+                target.Mode.fromConfiguration(self._configuration, name).install(qprint)
             except KeyError:
                 raise ConfigurationMissingError(
                     f"Missing mode configuration for '{name}'"
