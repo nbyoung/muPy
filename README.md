@@ -14,10 +14,10 @@ Build and run your project with a single command.
 Mix-and-match components from other projects with zero changes to source
 code. Simply edit the `*.mupy` configuration file, then build and run.
 
-Get started with no hardware using the two built-in targets that run
-automatically in the provided Docker containers. Transition to a
-hardware target when you're ready.
+Get started with no hardware using the three built-in targets.
+Transition to a hardware target when you're ready.
 
+| `ghost` | Host | CPython | 
 | `python` | Docker | CPython | 
 | `unix` | Docker | Micropython's ports/unix | 
 | `stm32` | Hardware | STM32F769 |
