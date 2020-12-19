@@ -17,12 +17,23 @@ code. Simply edit the `*.mupy` configuration file, then build and run.
 Get started with no hardware using the three built-in _soft_ targets.
 Transition to a hardware target when you're ready.
 
-Target | Mode | Micro/Python | Tested
--- | -- | -- | --
-`@ghost` | Local | CPython| Python 3.8.5
-`@python` | Docker | CPython | Python 3.7.9
-`@unix` | Docker | `ports/unix` | Micropython v1.12
-`@stm32` | Hardware | `ports/stm32` | v1.12 on STM32F769
+Target | Mode | Micro/Python | Tested | Install
+-- | -- | -- | -- | --
+`@ghost` | Local | CPython| Python 3.8.5 | pip install mupy
+`@python` | Docker | CPython | Python 3.7.9 | pip install 'mupy[docker]'
+`@unix` | Docker | `ports/unix` | Micropython v1.12 | pip install 'mupy[docker]'
+`@stm32` | Hardware | `ports/stm32` | v1.12 on STM32F769 | pip install 'mupy[docker]'
+
+### Requirements
+
+* Linux
+* Python 3.6+
+  * Tested on Python 3.8.5
+* Docker, for
+  * Running the Micropython `@unix` target
+  * Cross-compiling to any hardware target
+
+### nuPy
 
 Kick-start your Micropython project with the _nuPy_ application
 framework that builds and runs on out-of-the-box on _muPy_.

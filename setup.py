@@ -13,18 +13,21 @@ setuptools.setup(
     description="Multi-target application framework for MicroPython",
     long_description=long_description,
     long_description_content_type="text/markdown",
+    keywords="development",
     url="https://github.com/nbyoung/muPy",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX",
     ],
-    python_requires='>=3.3',
+    python_requires='>=3.6',
     install_requires=[
-        'docker',
         'semantic_version',
         'yaml',
     ],
+    extras_require={
+        'docker': [ 'docker' ],
+    },
     packages=setuptools.find_packages(),
     entry_points={
         'console_scripts': [
