@@ -3,9 +3,16 @@ import io
 import os
 import pathlib
 import py_compile
+import shutil
 import subprocess
+import sys
 
-import docker as Docker
+try:
+    import docker as Docker
+except ImportError:
+    print(
+        f"Use only '@ghost' target running '{sys.executable}', or 'pip install docker'"
+    )
 
 from . import version
 
@@ -51,10 +58,15 @@ class DockerMode(Mode):
             )
 
         def __enter__(self):
-            return self._container
+            #return self._container
+            return self
 
         def __exit__(self, exc_type, exc_value, exc_traceback):
             self._container.stop(timeout=self._stopTimeout)
+
+        def logs(self, *args, **kwargs):
+            for output in self._container.logs(*args, **kwargs):
+                yield output.decode('utf-8').strip()
             
 
     @staticmethod
@@ -122,7 +134,8 @@ class Target:
         meta = targetC.get('meta', {})
         try:
             return {
-                None: NullTarget,
+                None: LocalTarget,
+                'local': LocalTarget,
                 'docker': DockerTarget,
                 'cross': CrossTarget,
             }[mode](name, type, precompile, meta)
@@ -152,13 +165,16 @@ class Target:
     def buildContainer(self, buildPath, sourceFromTo):
         raise NotImplementedError()
 
-    def install(self, build):
+    def install(self, *args, **kwargs):
         raise NotImplementedError()
-        
 
-class NullTarget(Target):
+    def run(self, *args, **kwargs):
+        raise NotImplementedError()
 
-    class PseudoContainer:
+
+class LocalTarget(Target):
+
+    class Container:
 
         def __enter__(self):
             return self
@@ -166,24 +182,44 @@ class NullTarget(Target):
         def __exit__(self, exc_type, exc_value, exc_traceback):
             pass
 
-        def logs(self, *args, **kwargs):
-            return ()
+        @property
+        def output(self):
+            self._outputs = []
+            return self._outputs
 
+        def logs(self, *args, **kwargs):
+            for output in self._outputs:
+                yield output
 
     @property
-    def suffix(self): return ''
+    def suffix(self): return '.pyc' if self._precompile else '.py'
 
     def __init__(self, name, type, precompile, meta):
         super().__init__(name, type, precompile)
+        self._container = LocalTarget.Container()
 
     def buildContainer(self, buildPath, sourceFromTo):
-        return NullTarget.PseudoContainer()
+        output = self._container.output
+        for sourcePath, fromPath, toPath in sourceFromTo:
+            if self._precompile:
+                py_compile.compile(buildPath/fromPath, buildPath/toPath)
+            else:
+                # TODO precompile: false
+                shutil.copy2(buildPath/sourcePath, toPath)
+            output.append(toPath)
+        return self._container
 
-    def install(self, build):
+    def install(self, path, isQuiet=False):
         pass
 
-    def run(self, install):
-        print("Run")
+    def run(self, path, isSilent=False):
+        subprocess.run(
+            (sys.executable, (path/'main').with_suffix(self.suffix), ),
+            cwd=path,
+            check=True,
+            stdout=subprocess.DEVNULL if isSilent else None,
+            stderr=subprocess.STDOUT,
+        )
 
 class CrossTarget(Target):
 
@@ -219,7 +255,6 @@ class CrossTarget(Target):
                     f'cp --preserve=all {cP / fP} {(cP / tP).parent / os.path.basename(tP)}\n'
                 )
                 scriptFile.write(f'echo {tP}\n')
-        args = ('cat', script)
         args = ('bash', script)
         kwargs = {
             'volumes': {
@@ -248,6 +283,7 @@ class CrossTarget(Target):
 
     def run(self, path, isSilent=False):
         self._rshellCommand('repl ~ import main ~', isQuiet=isSilent)
+        if not isSilent: print()
 
 class DockerTarget(CrossTarget):
 
@@ -306,5 +342,6 @@ for _, fromPath, toPath in sourceFromTo:
                 working_dir=containerPath,
         ) as container:
             for output in container.logs(stream=True):
-                if not isSilent: print(output.decode('utf-8'), end='')
+                if not isSilent: print(output, end='')
+            if not isSilent: print()
             

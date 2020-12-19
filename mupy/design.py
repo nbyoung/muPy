@@ -492,7 +492,7 @@ class Build:
         if sourceFromTo:
             with target.buildContainer(buildPath, sourceFromTo) as container:
                 for output in container.logs(stream=True):
-                    callback(output.decode('utf-8').strip())
+                    callback(output)
         installPath = buildPath / Build._INSTALL / entryName / target.name
         shutil.rmtree(installPath, onerror=lambda type, value, tb: None )
         for directory, dirNames, fileNames in os.walk(compilePath):

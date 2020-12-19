@@ -10,6 +10,9 @@ directory:
 
 targets:
 
+  - name:       ghost
+    mode:       local
+
   - name:       python
     mode:       docker
     type:       cpython
