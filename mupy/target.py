@@ -10,9 +10,7 @@ import sys
 try:
     import docker as Docker
 except ImportError:
-    print(
-        f"Use only '@ghost' target running '{sys.executable}', or 'pip install docker'"
-    )
+    pass
 
 from . import version
 

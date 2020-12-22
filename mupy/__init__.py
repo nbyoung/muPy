@@ -21,6 +21,7 @@
 
 import os
 import pathlib
+import pkgutil
 import sys
 
 from .configuration import (
@@ -50,13 +51,22 @@ def command(name, help='Command help', subcommands={}):
         return _Command
     return _command
 
+_GHOST = 'ghost'
+_RUN_PIP_INSTALL_DOCKER = f'''
+Docker not installed. Use only the '@ghost' local target.
+Run 'pip install docker' and '{_MUPY_HOST} setup' again to use other targets.
+'''
+_IS_DOCKER =  bool(pkgutil.find_loader('docker'))
+
 class Command:
 
     VERSION = version.VERSION
     EPILOG = f'''
-Enviroment: MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
+Environment: MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
 Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
-'''
+''' + _RUN_PIP_INSTALL_DOCKER if not _IS_DOCKER else ''
+
+
 
     def __init__(self, configuration, args):
         self._configuration = configuration
@@ -69,18 +79,18 @@ Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
     _MUPY_HOST,
     help='Modify the host setup',
     subcommands = {
-        'init': ({'help': f"1. Create the host configuration file, '{_MUPY_HOST_YAML}'"}, {
+        'init': ({'help': f"Create the host configuration file, '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing file', 'action': 'store_true' },
         }),
-        'setup': ({'help': f"2. Set up the configuration in '{_MUPY_HOST_YAML}'"}, {
+        'setup': ({'help': f"Set up the configuration in '{_MUPY_HOST_YAML}'"}, {
             '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
         }),
-        'demo': ({'help': f"3. Install the demo files"}, {
-            '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
-        }),
-        'show': ({'help': f'4. Display the host setup details'}, {
-        }),
-        'remove': ({'help': f'5. Remove the host setup'}, {
+        # 'demo': ({'help': f"Install the demo files"}, {
+        #     '--force': { 'help': 'Overwrite any existing files', 'action': 'store_true' },
+        # }),
+        # 'show': ({'help': f'Display the host setup details'}, {
+        # }),
+        'remove': ({'help': f'Remove the host setup'}, {
             '--force': { 'action': 'store_true' },
         }),
     },
@@ -91,22 +101,19 @@ class Host(Command):
         target.CrossTarget.isInstalled(lambda m: qprint(m, file=sys.stderr))
         qprint(f"Setting up from '{self._configuration.path}'")
         host.Host.fromConfiguration(self._configuration).setup(self._args.force)
-        for name in ('cpython', 'micropython'):
-            try:
-                target.Mode.fromConfiguration(self._configuration, name).install(qprint)
-            except KeyError:
-                raise ConfigurationMissingError(
-                    f"Missing mode configuration for '{name}'"
-                )
-        for fileC in self._configuration.files:
-            path = pathlib.Path(fileC['path'])
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, 'w') as file:
-                file.write(fileC['content'])
-            qprint(f"Wrote file '{path}'")
+        if _IS_DOCKER:
+            for name in ('cpython', 'micropython'):
+                try:
+                    target.Mode.fromConfiguration(
+                        self._configuration, name
+                    ).install(qprint)
+                except KeyError:
+                    raise ConfigurationMissingError(
+                        f"Missing mode configuration for '{name}'"
+                    )
 
     def remove(self):
-        host.DockerMode.removeAllImages(qprint)
+        target.DockerMode.removeAllImages(qprint)
 
 @command(
     _MUPY_TARGET,
@@ -133,6 +140,8 @@ def _mupyOptions(options={}):
     }
     args.update(options)
     return args
+
+class CommandError(ValueError): pass
 
 @command(
     version.NAME,
@@ -170,11 +179,10 @@ class MuPy(Command):
 
     @property
     def _app(self):
-        return (
-            design.App(*syntax.App.parse(vars(self._args)[_APP]))
-            if vars(self._args)[_APP]
-            else None
-        )
+        app = syntax.App.parse(vars(self._args)[_APP])
+        if not app.target == _GHOST and not _IS_DOCKER:
+            raise CommandError(_RUN_PIP_INSTALL_DOCKER)
+        return design.App(*app) if vars(self._args)[_APP] else None
 
     def _stock(self):
         return design.Stock.fromPath(self._host.stockPath, self._grade)
