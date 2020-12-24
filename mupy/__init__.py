@@ -62,7 +62,7 @@ class Command:
 
     VERSION = version.VERSION
     EPILOG = f'''
-Environment: MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
+Environment: MUPY_DEBUG, MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
 Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 ''' + _RUN_PIP_INSTALL_DOCKER if not _IS_DOCKER else ''
 
@@ -238,6 +238,13 @@ class MuPy(Command):
 
 
 def _main(cls):
+    
+    def affirmative(string):
+        try:
+            return bool(int(string))
+        except ValueError:
+            return string.lower() in ('1', 'y', 'yes', 't', 'true')
+        
     from argparse import ArgumentParser, RawTextHelpFormatter
     parser = ArgumentParser(
         prog=cls.COMMAND,
@@ -261,9 +268,15 @@ def _main(cls):
     )
     parser.add_argument(
         '-q', '--quiet',
-        default=os.environ.get('MUPY_QUIET', False),
+        default=affirmative(os.environ.get('MUPY_QUIET', '')),
         action='store_true',
         help='Suppress terminal output',
+    )
+    parser.add_argument(
+        '--debug',
+        default=affirmative(os.environ.get('MUPY_DEBUG', '')),
+        action='store_true',
+        help='Include exception traceback',
     )
     subparsers = parser.add_subparsers(help=cls.HELP, dest='subcommand')
     for subcommand, (arguments, suboptions) in cls.SUBCOMMANDS.items():
@@ -287,11 +300,11 @@ def _main(cls):
             command = cls(configuration, args)
             command._do(args.subcommand)
         except Exception as exception:
+            if args.debug: raise exception
             print(
                 f'{exception.__class__.__name__}: {str(exception)}',
                 file=sys.stderr,
             )
-            raise exception # TODO Remove in production
             sys.exit(1)
     else:
         parser.print_help()
