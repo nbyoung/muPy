@@ -157,6 +157,10 @@ class Ensemble:
         else:
             content = content if content else {}
             version = content.get('version')
+            rpath = pathlib.Path(content.get('path', ''))
+            if rpath.is_absolute(): raise EnsembleSemanticError(
+                    f"Optional path must be relative, not '{rpath}'"
+            )
             exports = tuple(
                 [syntax.Identifier.check(e, f'{mupyPath} exports')
                  for e in content.get('exports', ())]
@@ -171,7 +175,8 @@ class Ensemble:
             )
             return cls(
                 os.path.basename(path),
-                mupyPath.parent, cls.nameFromPath(mupyPath), parts,
+                mupyPath.parent / rpath,
+                cls.nameFromPath(mupyPath), parts,
                 exports=exports, imports=imports, version=version,
             )
 
