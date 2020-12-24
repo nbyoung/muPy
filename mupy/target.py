@@ -56,7 +56,6 @@ class DockerMode(Mode):
             )
 
         def __enter__(self):
-            #return self._container
             return self
 
         def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -64,7 +63,7 @@ class DockerMode(Mode):
 
         def logs(self, *args, **kwargs):
             for output in self._container.logs(*args, **kwargs):
-                yield output.decode('utf-8').strip()
+                yield output.decode('utf-8')
             
 
     @staticmethod
