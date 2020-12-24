@@ -23,10 +23,6 @@ Target | Mode | Micro/Python | Tested | Install
 `@unix` | Docker | `ports/unix` | Micropython uPy v1.12 | pip install 'mupy[docker]'
 `@stm32` | Hardware | `ports/stm32` | uPy v1.12 on STM32F769 | pip install 'mupy[docker]'
 
-### Example
-
-
-
 ### Requirements
 
 * Linux
@@ -40,3 +36,62 @@ Target | Mode | Micro/Python | Tested | Install
 
 Kick-start your Micropython project with the _nuPy_ application
 framework that builds and runs on _muPy_.
+
+### Example
+
+```
+stock/
+├── A
+│   ├── demo.py
+│   ├── hello.mupy
+│   └── hello.py
+└── B
+    ├── demo.py
+    ├── hello.mupy
+    └── hello.py
+```
+
+* `stock/A/hello.mupy` and `stock/B/hello.mupy`
+```
+exports:        [ demo ]
+
+parts:
+
+  - name:       demo
+    path:       "demo.py"
+    uses:       [ hello ]
+
+  - name:       hello
+    path:       "hello.py"
+```
+
+* `stock/A/demo.mupy` and `stock/B/demo.mupy`
+```
+from hello import MESSAGE
+
+def main():
+    print(MESSAGE)
+
+main()
+```
+
+* `stock/A/hello.mupy`
+```
+MESSAGE = 'Hello, world!'
+```
+
+* `stock/B/hello.mupy`
+```
+MESSAGE = 'Hello, muPy!'
+```
+
+* `mupy run hello^demo@ghost --grade A`
+```
+Hello, world!
+```
+
+* `mupy run hello^demo@ghost --grade B`
+```
+Hello, muPy!
+```
+
