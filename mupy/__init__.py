@@ -184,8 +184,14 @@ class MuPy(Command):
             raise CommandError(_RUN_PIP_INSTALL_DOCKER)
         return design.App(*app) if vars(self._args)[_APP] else None
 
+    @property
+    def _target(self):
+        return target.Target.fromConfiguration(self._configuration, self._app.target)
+
     def _stock(self):
-        return design.Stock.fromPath(self._host.stockPath, self._grade)
+        return design.Stock.fromPath(
+            self._host.stockPath, self._target.type, self._grade
+        )
 
     def stock(self):
         stock = self._stock()
@@ -223,7 +229,7 @@ class MuPy(Command):
             self.kit(),
             self._host.buildPath,
             self._app.entryName,
-            target.Target.fromConfiguration(self._configuration, self._app.target),
+            self._target,
             qprint,
         )
         

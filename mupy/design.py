@@ -38,13 +38,13 @@ class App:
 class Part:
 
     @classmethod
-    def fromDictionary(cls, dictionary, location):
+    def fromDictionary(cls, type, dictionary, location):
         name = syntax.Identifier.check(dictionary.get('name'), location)
         if not name:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
-        path = pathlib.Path(dictionary.get('path'))
+        path = pathlib.Path(dictionary.get(f'path-{type}', dictionary.get('path')))
         if not path:
             raise EnsembleSemanticError(
                 f"Missing path for '{name}' in {location}"
@@ -141,7 +141,7 @@ class Ensemble:
         return path.stem
 
     @classmethod
-    def fromPaths(cls, path, mupyPath):
+    def fromPaths(cls, type, path, mupyPath):
         try:
             with open(mupyPath) as file:
                 content = yaml.safe_load(file)
@@ -166,7 +166,7 @@ class Ensemble:
                  for e in content.get('exports', ())]
             )
             parts = tuple(
-                [Part.fromDictionary(p, f'{mupyPath} parts')
+                [Part.fromDictionary(type, p, f'{mupyPath} parts')
                  for p in content.get('parts', ())]
             )
             imports = tuple(
@@ -174,6 +174,7 @@ class Ensemble:
                  for i in content.get('imports', ())]
             )
             return cls(
+                type,
                 os.path.basename(path),
                 mupyPath.parent / rpath,
                 cls.nameFromPath(mupyPath), parts,
@@ -181,9 +182,10 @@ class Ensemble:
             )
 
     def __init__(
-            self, grade, path, name, parts,
+            self, type, grade, path, name, parts,
             exports=(), imports=(), version=None,
     ):
+        self._type = type
         self._grade = grade
         self._path = path
         self._name = name
@@ -191,6 +193,9 @@ class Ensemble:
         self._exports = exports
         self._imports = imports
         self._version = version
+
+    @property
+    def type(self): return self._type
 
     @property
     def grade(self): return self._grade
@@ -241,7 +246,7 @@ class Ensemble:
 class EnsembleSet(MutableSet):
 
     @classmethod
-    def fromPath(cls, grade, path):
+    def fromPath(cls, type, grade, path):
         def isMuPy(filename):
             return pathlib.PurePath(filename).suffix == f'.{_MUPY}'
         ensembleSet=cls(grade)
@@ -257,7 +262,7 @@ class EnsembleSet(MutableSet):
                         )
                     else:
                         ensembleSet.add(
-                            Ensemble.fromPaths(path, mupyPath)
+                            Ensemble.fromPaths(type, path, mupyPath)
                         )
         return ensembleSet
 
@@ -298,7 +303,7 @@ class StockError(ValueError): pass
 class Stock:
 
     @classmethod
-    def fromPath(cls, path, grade=None):
+    def fromPath(cls, path, type=None, grade=None):
         if not (path.exists() and path.is_dir()):
             raise StockError(f"Stock directory does not exist, '{path}'")
         def pathGrade(path):
@@ -312,7 +317,7 @@ class Stock:
             if dE.is_dir() and gradeFilter(pathGrade(dE.path))
         ], key=pathGrade, reverse=True)
         return cls(
-            path, grade, tuple([EnsembleSet.fromPath(grade, gP)
+            path, grade, tuple([EnsembleSet.fromPath(type, grade, gP)
                                 for gP in gradePaths])
         )
 
