@@ -12,6 +12,7 @@ targets:
 
   - name:       ghost
     mode:       local
+    type:       cpython
 
   - name:       python
     mode:       docker

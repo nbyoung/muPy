@@ -38,14 +38,19 @@ class App:
 class Part:
 
     @classmethod
-    def fromDictionary(cls, type, dictionary, location):
+    def fromDictionary(cls, typeName, dictionary, location):
         name = syntax.Identifier.check(dictionary.get('name'), location)
         if not name:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
-        path = pathlib.Path(dictionary.get(f'path-{type}', dictionary.get('path')))
-        if not path:
+        typedPath = dictionary.get(f'path-{typeName}')
+        if not typedPath is None:
+            typedPath = pathlib.Path(typedPath) 
+        path = dictionary.get('path')
+        if path is not None:
+            path = pathlib.Path(path)
+        else:
             raise EnsembleSemanticError(
                 f"Missing path for '{name}' in {location}"
             )
@@ -57,15 +62,19 @@ class Part:
             [syntax.Identifier.check(e, location)
              for e in dictionary.get('uses', ())]
         )
-        return cls(name, path, uses)
+        return cls(name, typedPath, path, uses)
 
-    def __init__(self, name, path, uses):
+    def __init__(self, name, typedPath, path, uses):
         self._name = name
+        self._typedPath = typedPath
         self._path = path
         self._uses = uses
 
     @property
     def name(self): return self._name
+
+    @property
+    def typedPath(self): return self._typedPath
 
     @property
     def path(self): return self._path
@@ -420,7 +429,9 @@ class Kit:
         toPaths = {}
         def doKit(component, isMain):
             def rebase(path, name): return path.parent / (name + path.suffix)
-            fromPath = component.ensemble.path / component.part.path
+            fromPath = component.ensemble.path / (
+                component.part.typedPath or component.part.path
+            )
             toPath = path / rebase(
                 component.part.path, 'main' if isMain else component.origin
             )
