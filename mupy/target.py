@@ -62,8 +62,11 @@ class DockerMode(Mode):
             self._container.stop(timeout=self._stopTimeout)
 
         def logs(self, *args, **kwargs):
-            for output in self._container.logs(*args, **kwargs):
-                yield output.decode('utf-8')
+            try:
+                for output in self._container.logs(*args, **kwargs):
+                    yield output.decode('utf-8')
+            except KeyboardInterrupt:
+                pass
             
 
     @staticmethod
@@ -210,13 +213,17 @@ class LocalTarget(Target):
         pass
 
     def run(self, path, isSilent=False):
-        subprocess.run(
-            (sys.executable, (path/'main').with_suffix(self.suffix), ),
-            cwd=path,
-            check=True,
-            stdout=subprocess.DEVNULL if isSilent else None,
-            stderr=subprocess.STDOUT,
-        )
+        try:
+            subprocess.run(
+                (sys.executable, (path/'main').with_suffix(self.suffix), ),
+                cwd=path,
+                check=True,
+                stdout=subprocess.DEVNULL if isSilent else None,
+                stderr=subprocess.STDOUT,
+            )
+        except KeyboardInterrupt:
+            pass
+        if not isSilent: print()
 
 class CrossTarget(Target):
 
@@ -279,8 +286,10 @@ class CrossTarget(Target):
         self._rshellCommand(f'rsync {path} /flash', isQuiet=isQuiet)
 
     def run(self, path, isSilent=False):
-        self._rshellCommand('repl ~ import main ~', isQuiet=isSilent)
-        if not isSilent: print()
+        try:
+            self._rshellCommand('repl ~ import main ~', isQuiet=isSilent)
+        except KeyboardInterrupt:
+            pass
 
 class DockerTarget(CrossTarget):
 
@@ -325,7 +334,7 @@ for _, fromPath, toPath in sourceFromTo:
     def run(self, path, isSilent=False):
         containerPath = '/flash'
         args = (
-            ['python', 'main.pyc'] if self._type == 'cpython'
+            ['python', '-u', 'main.pyc'] if self._type == 'cpython'
             else ['micropython', '-m', 'main']
         )
         volumes = {
