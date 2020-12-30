@@ -93,7 +93,7 @@ class Import:
 
     @classmethod
     def fromDictionary(cls, dictionary, location):
-        name = syntax.Identifier.check(dictionary.get('name'), location)
+        name = dictionary.get('name')
         if not name:
             raise EnsembleSemanticError(
                 f"Missing import ensemble name in {location}"
