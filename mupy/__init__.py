@@ -34,6 +34,7 @@ from . import design
 from . import host
 from .quiet import Quiet; qprint = Quiet.qprint
 from . import syntax
+from . import tag
 from . import target
 from . import version
 
@@ -41,6 +42,7 @@ _MUPY = version.NAME
 _MUPY_HOST = f'{_MUPY}-host'
 _MUPY_TARGET = f'{_MUPY}-target'
 _MUPY_HOST_YAML = 'mupy-host.yaml'
+_MUPY_TAGS = ''
 
 def command(name, help='Command help', subcommands={}):
     def _command(cls):
@@ -62,7 +64,7 @@ class Command:
 
     VERSION = version.VERSION
     EPILOG = f'''
-Environment: MUPY_DEBUG, MUPY_QUIET, MUPY_DIRECTORY, MUPY_CONFIGURATION
+Environment: MUPY_DEBUG, MUPY_QUIET, MUPY_DIRECTORY, MUPY_HOST, MUPY_TAGS
 Commands: {_MUPY_HOST}, {_MUPY_TARGET}, {_MUPY}
 ''' + _RUN_PIP_INSTALL_DOCKER if not _IS_DOCKER else ''
 
@@ -133,6 +135,10 @@ def _mupyOptions(options={}):
             'help': 'Only use stock at this grade and higher',
             'type': str,
         },
+        '--tags': {
+            'help': 'Assert one or more build tags, e.g., +foo+bar',
+            'type': str, 'default': os.environ.get('MUPY_TAGS', _MUPY_TAGS),
+        },
         _APP: {
             'help': 'Select an ensemble and entry part with an optional target',
             'type': str, 'nargs': '?', 'default': '+',
@@ -189,9 +195,7 @@ class MuPy(Command):
         return target.Target.fromConfiguration(self._configuration, self._app.target)
 
     def _stock(self):
-        return design.Stock.fromPath(
-            self._host.stockPath, self._target.type, self._grade
-        )
+        return design.Stock.fromPath(self._host.stockPath, self._grade)
 
     def stock(self):
         stock = self._stock()
@@ -221,6 +225,7 @@ class MuPy(Command):
         return design.Kit.fromBOM(
             self._bom(self._app.ensemble, self._app.entry),
             self._host.kitPath(self._app),
+            self._target.tagRay.plus(tag.TagRay.fromString(self._args.tags)),
             callback,
         )
 

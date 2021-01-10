@@ -12,6 +12,7 @@ try:
 except ImportError:
     pass
 
+from . import tag
 from . import version
 
 class Mode:
@@ -130,6 +131,7 @@ class Target:
         mode = targetC.get('mode', 'cross')
         type = targetC.get('type', 'micropython')
         precompile = targetC.get('precompile', True)
+        tagRay = tag.TagRay.fromString(targetC.get('tags', ''))
         name = targetC.get('name', (nullC['name'] if type == None else type) + 'Target')
         meta = targetC.get('meta', {})
         try:
@@ -138,14 +140,15 @@ class Target:
                 'local': LocalTarget,
                 'docker': DockerTarget,
                 'cross': CrossTarget,
-            }[mode](name, type, precompile, meta)
+            }[mode](name, type, precompile, tagRay, meta)
         except KeyError:
             raise TargetConfigurationError(f"Unknown target type: '{type}'")
 
-    def __init__(self, name, type, precompile):
+    def __init__(self, name, type, precompile, tagRay):
         self._name = name
         self._type = type
         self._precompile = precompile
+        self._tagRay = tagRay
 
     @property
     def name(self): return self._name
@@ -155,6 +158,9 @@ class Target:
 
     @property
     def precompile(self): return self._precompile
+
+    @property
+    def tagRay(self): return self._tagRay
 
     @property
     def suffix(self): return (
@@ -194,8 +200,8 @@ class LocalTarget(Target):
     @property
     def suffix(self): return '.pyc' if self._precompile else '.py'
 
-    def __init__(self, name, type, precompile, meta):
-        super().__init__(name, type, precompile)
+    def __init__(self, name, type, precompile, tagRay, meta):
+        super().__init__(name, type, precompile, tagRay)
         self._container = LocalTarget.Container()
 
     def buildContainer(self, buildPath, sourceFromTo):
@@ -240,8 +246,8 @@ class CrossTarget(Target):
                 " Please install"
             )
 
-    def __init__(self, name, type, precompile, meta={}):
-        super().__init__(name, type, precompile)
+    def __init__(self, name, type, precompile, tagRay, meta={}):
+        super().__init__(name, type, precompile, tagRay)
         self._baud = meta.get('baud', 115200)
         self._port = meta.get('port', '/dev/ttyACM0')
 
@@ -293,8 +299,8 @@ class CrossTarget(Target):
 
 class DockerTarget(CrossTarget):
 
-    def __init__(self, name, type, precompile, meta):
-        super().__init__(name, type, precompile)
+    def __init__(self, name, type, precompile, tagRay, meta):
+        super().__init__(name, type, precompile, tagRay)
 
     def buildContainer(self, buildPath, sourceFromTo):
         if self.type == 'cpython':

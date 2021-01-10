@@ -13,14 +13,17 @@ targets:
   - name:       ghost
     mode:       local
     type:       cpython
+    tags:       +host
 
   - name:       python
     mode:       docker
     type:       cpython
+    tags:       +host
 
   - name:       unix
     mode:       docker
     precompile: false
+    tags:       +host
 
   - name:       stm32
     mode:       cross

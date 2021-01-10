@@ -7,6 +7,7 @@ import zlib
 
 from . import version
 from . import syntax
+from . import tag
 
 _MUPY = version.NAME
 
@@ -34,50 +35,57 @@ class App:
     @property
     def name(self):
         return self.entryName + f'@{self._target}' if self._target else ''
-    
+
 class Part:
 
     @classmethod
-    def fromDictionary(cls, typeName, dictionary, location):
+    def fromDictionary(cls, dictionary, location):
         name = syntax.Identifier.check(dictionary.get('name'), location)
         if not name:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
-        typedPath = dictionary.get(f'path-{typeName}')
-        if not typedPath is None:
-            typedPath = pathlib.Path(typedPath) 
-        path = dictionary.get('path')
-        if path is not None:
-            path = pathlib.Path(path)
-        else:
-            raise EnsembleSemanticError(
-                f"Missing path for '{name}' in {location}"
-            )
-        if path.is_absolute():
-            raise EnsembleSemanticError(
-                f"Absolute path '{path}' in {location}"
-            )
+        def checkPath(path):
+            if path is not None:
+                path = pathlib.Path(path)
+            else:
+                raise EnsembleSemanticError(
+                    f"Missing path for '{name}' in {location}"
+                )
+            if path.is_absolute():
+                raise EnsembleSemanticError(
+                    f"Absolute path '{path}' in {location}"
+                )
+            return path
+        path = checkPath(dictionary.get('path'))
+        pathTagIndex = tag.TagIndex(
+            [tag.TagIndex.Entry(
+                tag.TagRay.fromString(tagString),
+                checkPath(path),
+            ) for tagString, path in [
+                (k[4:], v) for (k, v) in dictionary.items() if k.startswith('path')
+            ]]
+        )
         uses = tuple(
             [syntax.Identifier.check(e, location)
              for e in dictionary.get('uses', ())]
         )
-        return cls(name, typedPath, path, uses)
+        return cls(name, path, pathTagIndex, uses)
 
-    def __init__(self, name, typedPath, path, uses):
+    def __init__(self, name, path, pathTagIndex, uses):
         self._name = name
-        self._typedPath = typedPath
         self._path = path
+        self._pathTagIndex = pathTagIndex
         self._uses = uses
 
     @property
     def name(self): return self._name
 
     @property
-    def typedPath(self): return self._typedPath
-
-    @property
     def path(self): return self._path
+
+    def taggedPath(self, tagRay):
+        return self._pathTagIndex.max(tagRay)
 
     @property
     def uses(self): return self._uses
@@ -150,7 +158,7 @@ class Ensemble:
         return path.stem
 
     @classmethod
-    def fromPaths(cls, type, path, mupyPath):
+    def fromPaths(cls, path, mupyPath):
         try:
             with open(mupyPath) as file:
                 content = yaml.safe_load(file)
@@ -172,18 +180,17 @@ class Ensemble:
             )
             exports = tuple(
                 [syntax.Identifier.check(e, f'{mupyPath} exports')
-                 for e in content.get('exports', ())]
+                 for e in (content.get('exports', ()) or ())]
             )
             parts = tuple(
-                [Part.fromDictionary(type, p, f'{mupyPath} parts')
-                 for p in content.get('parts', ())]
+                [Part.fromDictionary(p, f'{mupyPath} parts')
+                 for p in (content.get('parts', ()) or ())]
             )
             imports = tuple(
                 [Import.fromDictionary(i, f'{mupyPath} imports')
-                 for i in content.get('imports', ())]
+                 for i in (content.get('imports', ()) or ())]
             )
             return cls(
-                type,
                 os.path.basename(path),
                 mupyPath.parent / rpath,
                 cls.nameFromPath(mupyPath), parts,
@@ -191,10 +198,9 @@ class Ensemble:
             )
 
     def __init__(
-            self, type, grade, path, name, parts,
+            self, grade, path, name, parts,
             exports=(), imports=(), version=None,
     ):
-        self._type = type
         self._grade = grade
         self._path = path
         self._name = name
@@ -202,9 +208,6 @@ class Ensemble:
         self._exports = exports
         self._imports = imports
         self._version = version
-
-    @property
-    def type(self): return self._type
 
     @property
     def grade(self): return self._grade
@@ -255,7 +258,7 @@ class Ensemble:
 class EnsembleSet(MutableSet):
 
     @classmethod
-    def fromPath(cls, type, grade, path):
+    def fromPath(cls, grade, path):
         def isMuPy(filename):
             return pathlib.PurePath(filename).suffix == f'.{_MUPY}'
         ensembleSet=cls(grade)
@@ -271,7 +274,7 @@ class EnsembleSet(MutableSet):
                         )
                     else:
                         ensembleSet.add(
-                            Ensemble.fromPaths(type, path, mupyPath)
+                            Ensemble.fromPaths(path, mupyPath)
                         )
         return ensembleSet
 
@@ -312,7 +315,7 @@ class StockError(ValueError): pass
 class Stock:
 
     @classmethod
-    def fromPath(cls, path, type=None, grade=None):
+    def fromPath(cls, path, grade=None):
         if not (path.exists() and path.is_dir()):
             raise StockError(f"Stock directory does not exist, '{path}'")
         def pathGrade(path):
@@ -326,7 +329,7 @@ class Stock:
             if dE.is_dir() and gradeFilter(pathGrade(dE.path))
         ], key=pathGrade, reverse=True)
         return cls(
-            path, grade, tuple([EnsembleSet.fromPath(type, grade, gP)
+            path, grade, tuple([EnsembleSet.fromPath(grade, gP)
                                 for gP in gradePaths])
         )
 
@@ -424,14 +427,12 @@ class KitError(ValueError): pass
 class Kit:
 
     @classmethod
-    def fromBOM(cls, bom, path, callback=lambda fromPath, toPath: None):
+    def fromBOM(cls, bom, path, tagRay, callback=lambda fromPath, toPath: None):
         shutil.rmtree(path, onerror=lambda type, value, tb: None )
         toPaths = {}
         def doKit(component, isMain):
             def rebase(path, name): return path.parent / (name + path.suffix)
-            fromPath = component.ensemble.path / (
-                component.part.typedPath or component.part.path
-            )
+            fromPath = component.ensemble.path / component.part.taggedPath(tagRay)
             toPath = path / rebase(
                 component.part.path, 'main' if isMain else component.origin
             )

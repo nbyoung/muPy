@@ -13,8 +13,8 @@ class _Syntax(ValueError):
 
 class Identifier(_Syntax):
 
-    _re = r'[_a-zA-Z][_a-zA-Z0-9]*'
-    _pattern = re.compile(_re)
+    regex = r'[_a-zA-Z][_a-zA-Z0-9]*'
+    _pattern = re.compile(regex)
 
     @classmethod
     def _check(cls, string):
@@ -22,8 +22,8 @@ class Identifier(_Syntax):
 
 class App(_Syntax):
 
-    _re = f'({Identifier._re})(\^{Identifier._re})(@{Identifier._re})?'
-    _pattern = re.compile(_re)
+    regex = f'({Identifier.regex})(\^{Identifier.regex})(@{Identifier.regex})?'
+    _pattern = re.compile(regex)
     _namedtuple = namedtuple('App', ('ensemble', 'entry', 'target', ))
 
     @classmethod
