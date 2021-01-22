@@ -455,8 +455,8 @@ class Kit:
             try:
                 for shellString in [
                         s.format(**{
-                            'this': component.ensemble.path.relative_to(shell.cwd),
-                            'that': path.relative_to(shell.cwd),
+                            'this': component.ensemble.path,
+                            'that': path,
                         })
                         for s in component.part.taggedShell(tagRay)
                 ]:
