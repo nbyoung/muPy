@@ -33,6 +33,7 @@ from .configuration import (
 from . import design
 from . import host
 from .quiet import Quiet; qprint = Quiet.qprint
+from . import shell
 from . import syntax
 from . import tag
 from . import target
@@ -220,12 +221,19 @@ class MuPy(Command):
                     
     def kit(self):
         def callback(fromPath, toPath):
-            qprint(f'  {fromPath.relative_to(self._host.stockPath)}')
-            qprint(toPath.relative_to(self._host.buildPath))
+            qprint('  ' +
+                   (str(fromPath.relative_to(self._host.stockPath))
+                    if isinstance(fromPath, pathlib.Path) else str(fromPath))
+            )
+            qprint(
+                str(toPath.relative_to(self._host.buildPath))
+                if isinstance(toPath, pathlib.Path) else str(toPath)
+            )
         return design.Kit.fromBOM(
             self._bom(self._app.ensemble, self._app.entry),
             self._host.kitPath(self._app),
             self._target.tagRay.plus(tag.TagRay.fromString(self._args.tags)),
+            shell.Shell.fromDictionary(self._configuration.shell, self._args.directory),
             callback,
         )
 

@@ -63,12 +63,6 @@ class TagRay:
     def __ge__(self, other): return not self._plusTagSet < other._plusTagSet
     def __gt__(self, other): return not self._plusTagSet <= other._plusTagSet
 
-class TaggedPath:
-
-    def __init__(self, path, tagRay):
-        self._path = path
-        self._tagRay = tagRay
-
 class TagIndexError(ValueError): pass
 
 class TagIndex:
@@ -89,6 +83,8 @@ class TagIndex:
 
     def __iter__(self): return iter(self._entries)
 
+    def __bool__(self): return bool(len(self._entries))
+
     def _add(self, entry):
         if entry.tagRay in [entry.tagRay for entry in self._entries]:
             raise TagIndexError(f'Duplicate tags {tagRay}')
@@ -105,7 +101,7 @@ class TagIndex:
             reverse=True,
         )
         if 0 == len(entries):
-            raise TagIndexError(f"Entries for '{tagRay}' not found")
+            raise TagIndexError(f"Entries for '{tagRay}' not found in {[e.tagRay for e in entries]}")
         elif (
                 1 < len(entries)
                 and
@@ -115,3 +111,6 @@ class TagIndex:
                 f'Duplicates {entries[0].tagRay} and {entries[1].tagRay} for {tagRay}'
             )
         return entries[0].item
+
+    @property
+    def count(self): return len(self._entries)

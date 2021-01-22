@@ -2,6 +2,7 @@ from collections.abc import MutableSet
 import os
 import pathlib
 import shutil
+import subprocess
 import yaml
 import zlib
 
@@ -45,37 +46,50 @@ class Part:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
-        def checkPath(path):
+        SHELL = 'shell'
+        shellTagIndex = tag.TagIndex(
+            [tag.TagIndex.Entry(
+                tag.TagRay.fromString(tagString),
+                shellList,
+            ) for tagString, shellList in [
+                (k[len(SHELL):], v) for (k, v) in dictionary.items() if k.startswith(SHELL)
+            ]]
+        )
+        def checkPath(path, isNoneOkay=False):
             if path is not None:
                 path = pathlib.Path(path)
+            elif isNoneOkay:
+                return None
             else:
                 raise EnsembleSemanticError(
-                    f"Missing path for '{name}' in {location}"
+                    f"Missing path or shell for '{name}' in {location}"
                 )
             if path.is_absolute():
                 raise EnsembleSemanticError(
                     f"Absolute path '{path}' in {location}"
                 )
             return path
-        path = checkPath(dictionary.get('path'))
+        PATH = 'path'
+        path = checkPath(dictionary.get(PATH), bool(shellTagIndex.count))
         pathTagIndex = tag.TagIndex(
             [tag.TagIndex.Entry(
                 tag.TagRay.fromString(tagString),
                 checkPath(path),
             ) for tagString, path in [
-                (k[4:], v) for (k, v) in dictionary.items() if k.startswith('path')
+                (k[len(PATH):], v) for (k, v) in dictionary.items() if k.startswith(PATH)
             ]]
         )
         uses = tuple(
             [syntax.Identifier.check(e, location)
              for e in dictionary.get('uses', ())]
         )
-        return cls(name, path, pathTagIndex, uses)
+        return cls(name, path, pathTagIndex, shellTagIndex, uses)
 
-    def __init__(self, name, path, pathTagIndex, uses):
+    def __init__(self, name, path, pathTagIndex, shellTagIndex, uses):
         self._name = name
         self._path = path
         self._pathTagIndex = pathTagIndex
+        self._shellTagIndex = shellTagIndex
         self._uses = uses
 
     @property
@@ -87,6 +101,9 @@ class Part:
     def taggedPath(self, tagRay):
         return self._pathTagIndex.max(tagRay)
 
+    def taggedShell(self, tagRay):
+        return self._shellTagIndex.max(tagRay)
+
     @property
     def uses(self): return self._uses
 
@@ -94,6 +111,8 @@ class Part:
         return delimiter + ('\n'.join([f'{" "*margin}{line}' for line in (
             f'name: {self._name}',
             f'path: "{self._path}"',
+            # TODO self._pathTagIndex
+            # TODO self._shellTagIndex
             f'uses: [ {", ".join(self._uses)} ]' if self._uses else '',
         ) if line]))
 
@@ -246,8 +265,8 @@ class Ensemble:
             f'# {self._name} "{self._path}"',
             f'exports: [ {", ".join(self._exports)} ]',
             f'parts:\n%s' % '\n'.join(
-                [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
-                 for i in self._parts]
+                [p.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
+                 for p in self._parts]
             ) if self._parts else '',
             f'imports:\n%s' % '\n'.join(
                 [i.asYAML(' '*(margin+indent)+'-\n', margin+indent*2, indent)
@@ -427,10 +446,30 @@ class KitError(ValueError): pass
 class Kit:
 
     @classmethod
-    def fromBOM(cls, bom, path, tagRay, callback=lambda fromPath, toPath: None):
+    def fromBOM(
+            cls, bom, path, tagRay, shell, callback=lambda fromPath, toPath: None
+    ):
         shutil.rmtree(path, onerror=lambda type, value, tb: None )
         toPaths = {}
         def doKit(component, isMain):
+            try:
+                for shellString in [
+                        s.format(**{
+                            'this': component.ensemble.path.relative_to(shell.cwd),
+                            'that': path.relative_to(shell.cwd),
+                        })
+                        for s in component.part.taggedShell(tagRay)
+                ]:
+                    completedProcess = subprocess.run(
+                        shellString, check=True, shell=True, text=True,
+                        executable=shell.bin, cwd=shell.cwd, env=shell.env,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    )
+                    callback(shellString, completedProcess.stdout)
+            except tag.TagIndexError:
+                pass
+            if component.part.path is None:
+                return
             def rebase(path, name): return path.parent / (name + path.suffix)
             fromPath = component.ensemble.path / component.part.taggedPath(tagRay)
             toPath = path / rebase(
@@ -462,6 +501,8 @@ class Kit:
 
     @property
     def path(self): return self._path
+    
+class BuildError(ValueError): pass
 
 class Build:
 
@@ -490,27 +531,32 @@ class Build:
         else:
             shutil.rmtree(compilePath, onerror=lambda type, value, tb: None )
         sourceFromTo = []
+        copyRPaths = []
         for directory, dirNames, fileNames in os.walk(kit.path):
             directory = pathlib.Path(directory)
             hPath = cachePath / directory.relative_to(kit.path)
             cPath = compilePath / directory.relative_to(kit.path)
             cPath.mkdir(parents=True, exist_ok=True)
-            for filePath in [pathlib.Path(fN)
-                             for fN in fileNames
-                             if pathlib.Path(fN).suffix == Build._SUFFIX]:
-                sourceHash = Build.hash(directory / filePath)
-                targetFilePath = filePath.with_suffix(f'{target.suffix}.{sourceHash}')
-                if (hPath / targetFilePath).exists():
-                    shutil.copy2(hPath / targetFilePath, cPath / targetFilePath)
+            for filePath in [pathlib.Path(fN) for fN in fileNames]:
+                if filePath.suffix == Build._SUFFIX:
+                    sourceHash = Build.hash(directory / filePath)
+                    targetFilePath = filePath.with_suffix(f'{target.suffix}.{sourceHash}')
+                    if (hPath / targetFilePath).exists():
+                        shutil.copy2(hPath / targetFilePath, cPath / targetFilePath)
+                    else:
+                        sourceFromTo.append((
+                            os.path.relpath(
+                                directory / filePath, kit.path),
+                            os.path.relpath(
+                                directory / filePath, buildPath),
+                            os.path.relpath(
+                                (cPath / targetFilePath), buildPath)
+                        ))
                 else:
-                    sourceFromTo.append((
-                        os.path.relpath(
-                            directory / filePath, kit.path),
-                        os.path.relpath(
-                            directory / filePath, buildPath),
-                        os.path.relpath(
-                            (cPath / targetFilePath), buildPath)
-                    ))
+                    copyRPaths.append(directory.relative_to(kit.path) / filePath)
+            copyRPaths.extend(
+                [directory.relative_to(kit.path) / pathlib.Path(dN) for dN in dirNames]
+            )
         if sourceFromTo:
             with target.buildContainer(buildPath, sourceFromTo) as container:
                 for output in container.logs(stream=True):
@@ -524,6 +570,18 @@ class Build:
             for fileName in [pathlib.Path(fN) for fN in fileNames]:
                 shutil.copy2(directory / fileName, iPath / fileName.stem)
                 callback(str((iPath / fileName.stem).relative_to(buildPath)))
+        for copyRPath in copyRPaths:
+            fromPath = kit.path / copyRPath
+            toPath = installPath / copyRPath
+            if fromPath.exists():
+                if fromPath.is_file():
+                    toPath.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(fromPath, toPath)
+                elif fromPath.is_dir():
+                    toPath.mkdir(parents=True, exist_ok=True)
+                else:
+                    raise BuildError(f"File is not valid '{fromPath}'")
+            callback(toPath.relative_to(buildPath))
         return cls(installPath, target)
 
     def __init__(self, path, target):

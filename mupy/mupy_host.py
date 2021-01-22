@@ -4,6 +4,11 @@ from .host import Host
 PYTHONPATH = '/flash/lib'
     
 YAML = f"""
+
+#shell:
+#  bin:          '/bin/dash'
+#  env:          {{ 'FOO': 'bar' }}
+
 directory:
   stock:        "{Host.STOCK}"
   build:        "{Host.BUILD}"

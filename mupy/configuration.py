@@ -85,14 +85,8 @@ class Configuration:
         self._directory = yamlContent.get('directory', {})
         ConfigurationIdentifierError.checkItems(
             self._directory, ('lib', 'app', 'dev', 'build', ))
+        self._shell = yamlContent.get('shell', {})
         self._mode = yamlContent.get('mode', {})
-        self._libs = yamlContent.get('libs', [])
-        for lib in self._libs:
-            ConfigurationIdentifierError.checkItems( lib, ('name', ))
-        self._apps = yamlContent.get('apps', [])
-        for app in self._apps:
-            ConfigurationIdentifierError.checkItems(app, ('name', ))
-        self._files = yamlContent.get('files', [])
         self._targets = yamlContent.get('targets', [])
         for target in self._targets:
             ConfigurationIdentifierError.checkItems(
@@ -111,17 +105,11 @@ class Configuration:
     def directory(self): return self._directory
 
     @property
+    def shell(self): return self._shell
+
+    @property
     def mode(self): return self._mode
 
     @property
-    def libs(self): return self._libs
-
-    @property
-    def apps(self): return self._apps
-
-    @property
     def targets(self): return self._targets
-
-    @property
-    def files(self): return self._files
         
