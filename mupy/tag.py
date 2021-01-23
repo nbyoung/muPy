@@ -65,34 +65,31 @@ class TagRay:
 
 class TagIndexError(ValueError): pass
 
+class _Entry:
+    def __init__(self, tagRay, item):
+        self._tagRay = tagRay
+        self._item = item
+    def __len__(self): return len(self._tagRay)
+    @property
+    def tagRay(self): return self._tagRay
+    @property
+    def item(self): return self._item
+
 class TagIndex:
 
-    class Entry:
-        def __init__(self, tagRay, item):
-            self._tagRay = tagRay
-            self._item = item
-        def __len__(self): return len(self._tagRay)
-        @property
-        def tagRay(self): return self._tagRay
-        @property
-        def item(self): return self._item
-
-    def __init__(self, entries=()):
+    def __init__(self, tagRayItems=()):
         self._entries = []
-        for entry in entries: self._add(entry)
+        for tagRay, item in tagRayItems: self.add(tagRay, item)
 
     def __iter__(self): return iter(self._entries)
 
     def __bool__(self): return bool(len(self._entries))
 
-    def _add(self, entry):
-        if entry.tagRay in [entry.tagRay for entry in self._entries]:
+    def add(self, tagRay, item):
+        if tagRay in [e.tagRay for e in self._entries]:
             raise TagIndexError(f'Duplicate tags {tagRay}')
         else:
-            self._entries.append(entry)
-
-    def add(self, tagRay, item):
-        self._add(TagIndex.Entry(tagRay, item))
+            self._entries.append(_Entry(tagRay, item))
 
     def max(self, tagRay):
         entries = sorted(

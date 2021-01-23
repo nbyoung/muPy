@@ -46,15 +46,19 @@ class Part:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
-        SHELL = 'shell'
-        shellTagIndex = tag.TagIndex(
-            [tag.TagIndex.Entry(
-                tag.TagRay.fromString(tagString),
-                shellList,
-            ) for tagString, shellList in [
-                (k[len(SHELL):], v) for (k, v) in dictionary.items() if k.startswith(SHELL)
-            ]]
-        )
+        shellTagIndex = tag.TagIndex()
+        for prefix, isQuiet in (
+                ('shell', False),
+                ('shhell', True),
+        ):
+            for tagString, shellList in [
+                    (k[len(prefix):], v)
+                    for (k, v) in dictionary.items()
+                    if k.startswith(prefix)
+            ]:
+                shellTagIndex.add(
+                    tag.TagRay.fromString(tagString), (shellList, isQuiet),
+                )
         def checkPath(path, isNoneOkay=False):
             if path is not None:
                 path = pathlib.Path(path)
@@ -72,11 +76,11 @@ class Part:
         PATH = 'path'
         path = checkPath(dictionary.get(PATH), bool(shellTagIndex.count))
         pathTagIndex = tag.TagIndex(
-            [tag.TagIndex.Entry(
-                tag.TagRay.fromString(tagString),
-                checkPath(path),
-            ) for tagString, path in [
-                (k[len(PATH):], v) for (k, v) in dictionary.items() if k.startswith(PATH)
+            [(tag.TagRay.fromString(tagString), checkPath(path))
+             for tagString, path in [
+                     (k[len(PATH):], v)
+                     for (k, v) in dictionary.items()
+                     if k.startswith(PATH)
             ]]
         )
         uses = tuple(
@@ -450,36 +454,49 @@ class Kit:
             cls, bom, path, tagRay, shell, callback=lambda fromPath, toPath: None
     ):
         shutil.rmtree(path, onerror=lambda type, value, tb: None )
+        path.mkdir(parents=True)
         toPaths = {}
         def doKit(component, isMain):
+            name = 'main' if isMain else component.origin
+            shellDictionary = {
+                'origin': component.origin,
+                'name': name,
+                'here': component.ensemble.path,
+                'there': path,
+            }
+            if component.part.path is not None:
+                def rebase(path): return path.parent / (name + path.suffix)
+                fromPath = component.ensemble.path / component.part.taggedPath(tagRay)
+                toPath = path / rebase(component.part.path)
+                if toPath in toPaths:
+                    if toPaths[toPath].samefile(fromPath):
+                        return
+                    raise KitError(f"Invalid duplicates '{toPaths[toPath]}' and '{fromPath}' both map to {toPath}")
+                toPaths[toPath] = fromPath
+                shellDictionary['this'] = fromPath
+                shellDictionary['that'] = toPath
             try:
+                shellStrings, isQuiet = (
+                    component.part.taggedShell(tagRay)
+                    or ((), False)
+                )
+                input = ''
                 for shellString in [
-                        s.format(**{
-                            'this': component.ensemble.path,
-                            'that': path,
-                        })
-                        for s in component.part.taggedShell(tagRay)
+                        s.format(**shellDictionary)
+                        for s in shellStrings
                 ]:
                     completedProcess = subprocess.run(
-                        shellString, check=True, shell=True, text=True,
+                        shellString,
+                        check=True, shell=True, text=True, input=input,
                         executable=shell.bin, cwd=shell.cwd, env=shell.env,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     )
-                    callback(shellString, completedProcess.stdout)
+                    input = completedProcess.stdout
+                    if not isQuiet: callback(shellString, completedProcess.stdout)
             except tag.TagIndexError:
-                pass
-            if component.part.path is None:
+                pass    
+            if component.part.path is None or toPath.exists():
                 return
-            def rebase(path, name): return path.parent / (name + path.suffix)
-            fromPath = component.ensemble.path / component.part.taggedPath(tagRay)
-            toPath = path / rebase(
-                component.part.path, 'main' if isMain else component.origin
-            )
-            if toPath in toPaths:
-                if toPaths[toPath].samefile(fromPath):
-                    return
-                raise KitError(f"Invalid duplicates '{toPaths[toPath]}' and '{fromPath}' both map to {toPath}")
-            toPaths[toPath] = fromPath
             if fromPath.exists():
                 toPath.parent.mkdir(parents=True, exist_ok=True)
                 if fromPath.is_file():
