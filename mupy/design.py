@@ -46,6 +46,25 @@ class Part:
             raise EnsembleSemanticError(
                 f"Missing part name in {location}"
             )
+        def checkShlet(shlet):
+            if not isinstance(shlet, dict):
+                raise EnsembleSemanticError(
+                    f"Shell variables ('shlet') must be a dictionary in {location}"
+                )
+            for key in shlet.keys():
+                syntax.Identifier.check(key, location)
+            return shlet
+        SHLET = 'shlet'
+        shletTagIndex = tag.TagIndex()
+        for tagString, shlet in [
+                (k[len(SHLET):], v)
+                for (k, v) in dictionary.items()
+                if k.startswith(SHLET)
+        ]:
+            shletTagIndex.add(
+                tag.TagRay.fromString(tagString), checkShlet(shlet),
+            )
+
         shellTagIndex = tag.TagIndex()
         for prefix, isQuiet in (
                 ('shell', False),
@@ -87,12 +106,13 @@ class Part:
             [syntax.Identifier.check(e, location)
              for e in dictionary.get('uses', ())]
         )
-        return cls(name, path, pathTagIndex, shellTagIndex, uses)
+        return cls(name, path, pathTagIndex, shletTagIndex, shellTagIndex, uses)
 
-    def __init__(self, name, path, pathTagIndex, shellTagIndex, uses):
+    def __init__(self, name, path, pathTagIndex, shletTagIndex, shellTagIndex, uses):
         self._name = name
         self._path = path
         self._pathTagIndex = pathTagIndex
+        self._shletTagIndex = shletTagIndex
         self._shellTagIndex = shellTagIndex
         self._uses = uses
 
@@ -104,6 +124,9 @@ class Part:
 
     def taggedPath(self, tagRay):
         return self._pathTagIndex.max(tagRay)
+
+    def taggedShlet(self, tagRay):
+        return self._shletTagIndex.max(tagRay)
 
     def taggedShell(self, tagRay):
         return self._shellTagIndex.max(tagRay)
@@ -476,13 +499,18 @@ class Kit:
                 shellDictionary['this'] = fromPath
                 shellDictionary['that'] = toPath
             try:
+                shlet = component.part.taggedShlet(tagRay)
+            except tag.TagIndexError:
+                shlet = {}
+            try:
                 shellStrings, isQuiet = (
                     component.part.taggedShell(tagRay)
                     or ((), False)
                 )
                 input = ''
+                substitutions = {**shellDictionary, **shlet}
                 for shellString in [
-                        s.format(**shellDictionary)
+                        s.format(**substitutions)
                         for s in shellStrings
                 ]:
                     completedProcess = subprocess.run(
