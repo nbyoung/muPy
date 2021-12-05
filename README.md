@@ -32,6 +32,17 @@ Target | Mode | Micro/Python | Tested | Install
   * Running the Micropython `@unix` target
   * Cross-compiling to any hardware target
 
+### Developers
+
+Use a virtual environment:
+* `source venv/bin/activate`
+
+Package and install the muPy command as follows:
+* `python setup.py bdist_wheel`
+* `pip install dist/mupy-0.0.4-py3-none-any.whl`
+  * `--force-reinstall` override equal versions
+  * `--verbose` observe the details
+
 ### nuPy
 
 Kick-start your Micropython project with the _nuPy_ application
